@@ -1,0 +1,10 @@
+name: CT_snakemake
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.7
+  - r-base=3.6.1
+  - r-seurat=3.1.5
+
