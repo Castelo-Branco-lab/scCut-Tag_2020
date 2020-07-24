@@ -1,0 +1,105 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  config: ""
+---
+
+
+
+```{r library}
+library(loomR,quietly = TRUE,warn.conflicts = FALSE)
+library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
+library(Signac,quietly = TRUE,warn.conflicts = FALSE)
+library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
+library(EnsDb.Mmusculus.v79,quietly = TRUE,warn.conflicts = FALSE)
+
+set.seed(100)
+```
+
+
+```{r set_root_dir}
+
+setwd('../../')
+knitr::opts_knit$set(root.dir = getwd())
+```
+# Read config
+
+```{r read_config}
+config <- yaml::read_yaml(params$config)
+```
+
+```{r connect_to_loom}
+stenRNA <- connect(filename=config$input$Sten_RNA$loom_file,mode='r+')
+meta.data <- data.frame(Age=stenRNA$col.attrs[['Age']][])
+
+for (column in names(stenRNA$col.attrs)[2:length(names(stenRNA$col.attrs))])
+  {
+  meta.data[,column] <- stenRNA$col.attrs[[column]][]
+}
+  
+```
+
+```{r get_matrix}
+cells.idx.small <- sort(sample(dim(meta.data)[1],20000))
+
+mat <- stenRNA$matrix[cells.idx.small,]
+mat.t <- as(t(mat),'dgCMatrix')
+
+
+rownames(mat.t) <- make.unique(stenRNA$row.attrs$Gene[])
+colnames(mat.t) <- make.unique(meta.data$CellID[cells.idx.small])
+
+rownames(meta.data) <- make.unique(meta.data$CellID)
+
+sten.RNA <- CreateSeuratObject(counts = mat.t,project = "Sten_RNA",assay = "RNA",meta.data = meta.data[cells.idx.small,])
+rm(mat)
+```
+
+
+```{r cluster}
+sten.RNA$ClusterName <- factor(sten.RNA$ClusterName,levels=unique(sten.RNA$ClusterName))
+sten.RNA <- FindVariableFeatures(sten.RNA)
+sten.RNA <- NormalizeData(sten.RNA)
+sten.RNA <- ScaleData(sten.RNA)
+sten.RNA <- RunPCA(sten.RNA, features = VariableFeatures(object = sten.RNA))
+sten.RNA <- FindNeighbors(sten.RNA, dims = 1:15)
+sten.RNA <- FindClusters(sten.RNA, resolution = 0.5)
+sten.RNA <- RunUMAP(sten.RNA, dims = 1:15)
+DimPlot(sten.RNA,group.by = "Taxonomy_group",label=TRUE,repel=TRUE) + NoLegend()
+saveRDS(object = sten.RNA,"results/Sten_RNA/clustering/01.clustering_20000cells.Rds")
+```
+
+
+```{r plot_it,fig.width=8,fig.height=8}
+sten.RNA <- SetIdent(sten.RNA,cells = colnames(sten.RNA),value = sten.RNA$TaxonomyRank4)
+DimPlot(sten.RNA,label=TRUE,repel=TRUE,pt.size = 1) + NoLegend()
+```
+
+
+```{r markers}
+markers <- FindAllMarkers(sten.RNA,min.pct = 0.1,logfc.threshold = 0.5,only.pos = TRUE)
+write.csv2(x = markers,file = "results/Sten_RNA/clustering/sten_RNA_markers.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

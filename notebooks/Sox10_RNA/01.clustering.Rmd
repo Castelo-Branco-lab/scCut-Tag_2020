@@ -1,0 +1,186 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  config: ""
+---
+
+```{r libraries}
+library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
+library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
+library(patchwork,quietly = TRUE,warn.conflicts = FALSE)
+library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
+library(harmony,quietly = TRUE,warn.conflicts = FALSE)
+
+set.seed(2020)
+rm(list=ls())
+```
+
+```{r set_root_dir}
+
+setwd('../../')
+knitr::opts_knit$set(root.dir = getwd())
+```
+
+```{r read_config}
+config <- yaml::read_yaml(params$config)
+```
+
+
+```{r load_10x}
+
+print(getwd())
+brain1 <- Read10X(config$input$Sox10_RNA$replicate1)
+brain2 <- Read10X(config$input$Sox10_RNA$replicate2)
+
+# Create seurat objects
+brain1 <- CreateSeuratObject(counts = brain1, project = "scRNA", min.cells = 3, min.features = 200)
+brain2 <- CreateSeuratObject(counts = brain2, project = "scRNA", min.cells = 3, min.features = 200)
+
+# Add replicate information to metadata
+brain1$sample <- "rep1"
+brain2$sample <- "rep2"
+
+# Merge the seurat objects
+brain <- merge(brain1,brain2)
+rm(list=c('brain1','brain2'))
+
+# Remove GFP from count matrix
+GFP <- brain[['RNA']]@counts['GFP',]
+brain <- brain[-grep(pattern = 'GFP',x = rownames(brain)),]
+
+# Add GFP to object metadata
+brain$GFP_counts <- GFP[rownames(brain@meta.data)]
+brain$GFP_logcounts <- log(brain$GFP_counts + 1,10)
+
+# Look at mitochondrial genes ratios
+brain[["percent.mt"]] <- PercentageFeatureSet(brain, pattern = "^mt-")
+VlnPlot(brain, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3,pt.size = 0.1) 
+```
+
+
+```{r plot_QC}
+plot1 <- FeatureScatter(brain, feature1 = "nCount_RNA", feature2 = "percent.mt",pt.size = 0.2)
+plot2 <- FeatureScatter(brain, feature1 = "nCount_RNA", feature2 = "nFeature_RNA",pt.size=0.2)
+plot1 + plot2
+```
+
+```{r subset_and_normalize}
+brain <- subset(brain, subset = nFeature_RNA > 200 & percent.mt < 15)
+brain <- NormalizeData(brain, normalization.method = "LogNormalize", scale.factor = 10000)
+
+brain <- FindVariableFeatures(brain, selection.method = "vst", nfeatures = 2000)
+top10 <- head(VariableFeatures(brain), 10)
+
+plot1 <- VariableFeaturePlot(brain)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+```{r scale}
+all.genes <- rownames(brain)
+brain <- ScaleData(brain, features = all.genes)
+```
+
+```{r RunPCA_and_integrate, fig.width=6,fig.height=6}
+brain <- RunPCA(brain, features = VariableFeatures(object = brain))
+brain <- RunHarmony(brain,group.by.vars = 'sample',dims.use = 1:40)
+
+DimHeatmap(brain, dims = 1:25, cells = 500, balanced = TRUE)
+ElbowPlot(brain)
+```
+
+```{r cLuster}
+brain <- FindNeighbors(brain, dims = 1:20,reduction = 'harmony')
+brain <- FindClusters(brain, resolution = 0.02)
+```
+
+```{r runUMAP}
+brain <- RunUMAP(brain, dims = 1:20,reduction = 'harmony')
+DimPlot(brain, reduction = "umap",label=TRUE)
+
+
+#brain <- RunTSNE(brain, dims = 1:20)
+#DimPlot(brain, reduction = "tsne",label=TRUE)
+
+
+# new.cluster.ids <- c("Astrocytes","Oligodendrocytes","VLMCs","Microglia","")
+```
+
+
+```{r FindMarkers}
+markers <- FindAllMarkers(brain, min.pct = 0.4)
+
+top10 <- markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+p1 <- DoHeatmap(brain, features = top10$gene) + NoLegend()
+p1
+```
+
+```{r save_objects}
+saveRDS(object = brain, file = "results/Sox10_RNA/clustering/all_cells/01.clustering.Rds")
+write.csv2(markers,"results/Sox10_RNA/clustering/all_cells//markers.csv")
+png("results/Sox10_RNA/clustering/all_cells/heatmap.png",width=1024,height=1024)
+p1
+dev.off()
+```
+
+# GFP+ cells
+
+```{r Subset_GFP+_cells}
+brain.GFP <- brain[,brain$GFP_counts > 5]
+
+
+brain.GFP <- NormalizeData(brain.GFP, normalization.method = "LogNormalize", scale.factor = 10000)
+brain.GFP <- ScaleData(brain.GFP)
+
+brain.GFP <- FindVariableFeatures(brain.GFP, selection.method = "vst", nfeatures = 2000)
+
+brain.GFP <- RunPCA(brain.GFP, features = VariableFeatures(object = brain.GFP))
+brain.GFP <- RunUMAP(brain.GFP, dims = 1:8,reduction = 'pca')
+
+brain.GFP <- FindNeighbors(brain.GFP, dims = 1:40,reduction = 'pca')
+brain.GFP <- FindClusters(brain.GFP, resolution = 0.1)
+
+DimPlot(brain.GFP, reduction = "umap",label=TRUE)
+
+new.cluster.ids <- c("Astrocytes","Oligodendrocytes","Astrocytes","OEC","Pericytes","COP-NFOL","VEC","VLMC","OPC","VLMC")
+
+names(new.cluster.ids) <-levels(brain.GFP@active.ident)
+brain.GFP <- RenameIdents(brain.GFP,new.cluster.ids)
+
+brain.GFP@active.ident <- factor(brain.GFP@active.ident,levels = levels(brain.GFP@active.ident)[c(1,3,9,6,2,4,8,10,7,5)])
+
+DimPlot(brain.GFP,group.by = 'sample',pt.size=0.2)
+DimPlot(brain.GFP,label=TRUE,pt.size=0.2)
+
+```
+
+```{r findMarkers}
+markers.GFP <- FindAllMarkers(brain.GFP, min.pct = 0.2)
+
+top10 <- markers.GFP %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
+p1 <- DoHeatmap(brain.GFP, features = top10$gene) + NoLegend()
+p1
+```
+
+```{r VlnPlots}
+VlnPlot(brain.GFP,features=c("Sox10","Olig2","Pdgfra","Sox9"),pt.size=0,ncol = 2)
+VlnPlot(brain.GFP,features=c("Mbp","Mog","C1ql1","Neu4"),pt.size=0,ncol = 2)
+VlnPlot(brain.GFP,features=c("Aqp4","Slc1a2","Sox9","Rfx4"),pt.size=0,ncol = 2)
+
+
+```
+
+```{r save_GFP+_Objects}
+
+brain.GFP$cell_type <- brain.GFP@active.ident
+
+saveRDS(object = brain.GFP, file = "results/Sox10_RNA/clustering/GFP/01.clustering.Rds")
+write.csv2(markers.GFP,"results/Sox10_RNA/clustering/GFP/markers.csv")
+png("results/Sox10_RNA/clustering/GFP/heatmap.png",width=1024,height=1024)
+p1
+dev.off()
+```
+
