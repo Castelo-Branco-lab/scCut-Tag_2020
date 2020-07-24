@@ -262,8 +262,8 @@ markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodya
 #View(markers)
 
 
-saveRDS(brain.merged,"results/H3K27me3/clustering_merged/01.clustering.Rmd")
-write.csv2(x = markers,file="results/H3K27me3/clustering_merged/markers.csv")
+saveRDS(brain.merged,"results/H3K27me3/clustering/01.clustering.Rds")
+write.csv2(x = markers,file="results/H3K27me3/clustering/markers.csv")
 
 ```
 
@@ -324,7 +324,7 @@ lapply(levels(brain.merged@active.ident),function(x){
 
 fragments.x <- fragments[fragments$name %in% colnames(brain.merged)]
 coverage.x  <- coverage(fragments.x) / length(fragments.x)
-rtracklayer::export.bw("results/H3K27me3/clustering/bigwig/clusters_all.bw")
+rtracklayer::export.bw(object = coverage.x, con ="results/H3K27me3/clustering/bigwig/clusters_all.bw")
 
 ```
 

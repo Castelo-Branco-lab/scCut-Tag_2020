@@ -54,8 +54,8 @@ rule H3K4me3_clustering:
 		config             = config_file
 	output:
 		report   = 'notebooks/H3K4me3/H3K4me3_clustering_merge.html',
-		R_object = 'results/H3K4me3/clustering_merged/01.clustering.Rmd',
-		markers  = 'results/H3K4me3/clustering_merged/markers.csv',
+		R_object = 'results/H3K4me3/clustering/01.clustering.Rmd',
+		markers  = 'results/H3K4me3/clustering/markers.csv',
 		bigwig   = 'results/H3K4me3/clustering/bigwig/clusters_all.bw',
 		heatmap  = 'results/H3K4me3/clustering/bins_heatmap.png'
 	shell:
@@ -73,8 +73,8 @@ rule H3K27me3_clustering:
 		config             = config_file
 	output:
 		report   = 'notebooks/H3K27me3/H3K27me3_clustering_merge.html',
-		R_object = 'results/H3K27me3/clustering_merged/01.clustering.Rmd',
-		markers  = 'results/H3K27me3/clustering_merged/markers.csv',
+		R_object = 'results/H3K27me3/clustering/01.clustering.Rmd',
+		markers  = 'results/H3K27me3/clustering/markers.csv',
 		bigwig   = 'results/H3K27me3/clustering/bigwig/clusters_all.bw',
 		heatmap  = 'results/H3K27me3/clustering/bins_heatmap.png'
 	shell:

@@ -281,19 +281,19 @@ markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodya
 #View(markers)
 
 
-saveRDS(brain.merged,"results/H3K4me3/clustering_merged/01.clustering.Rmd")
-write.csv2(x = markers,file="results/H3K4me3/clustering_merged/markers.csv")
+saveRDS(brain.merged,"results/H3K4me3/clustering/01.clustering.Rds")
+write.csv2(x = markers,file="results/H3K4me3/clustering/markers.csv")
 
 ```
 
 ```{r export_bw}
-fragments1 <- config$input$H3K4me3$`P15_GFP+`
+fragments1 <- config$input$H3K4me3$`P15_GFP-`$fragments
 fragments1 <- rtracklayer::import(fragments1,format = "bed")
 
-fragments2 <- config$input$H3K4me3$`P15_GFP+`
+fragments2 <- config$input$H3K4me3$`P15_GFP+`$fragments
 fragments2 <- rtracklayer::import(fragments2,format = "bed")
 
-fragments3 <- config$input$H3K4me3$`P25_GFP+`
+fragments3 <- config$input$H3K4me3$`P25_GFP+`$fragments
 fragments3 <- rtracklayer::import(fragments3,format = "bed")
 
 fragments  <- c(fragments1,fragments2,fragments3)
@@ -342,7 +342,7 @@ lapply(levels(brain.merged@active.ident),function(x){
 
 fragments.x <- fragments[fragments$name %in% colnames(brain.merged)]
 coverage.x  <- coverage(fragments.x) / length(fragments.x)
-rtracklayer::export.bw("results/H3K4me3/clustering/bigwig/clusters_all.bw")
+rtracklayer::export.bw(object = coverage.x,con = "results/H3K4me3/clustering/bigwig/clusters_all.bw")
 
 ```
 
