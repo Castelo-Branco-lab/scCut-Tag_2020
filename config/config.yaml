@@ -18,7 +18,7 @@ samples:
     GFP: GFP+
     Age: P25
   H3K4me3_N3: 
-    cellranger_out: /data/proj/GCB_MB/CT/CT_20_20_MB1
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01
     clustering_params: 
       min_reads_log10: 2.5
       max_reads_log10: 4.2
@@ -27,7 +27,7 @@ samples:
     GFP: GFP+
     Age: P15
   H3K4me3_N4: 
-    cellranger_out: /data/proj/GCB_MB/CT/CT_20_20_MB2
+    cellranger_out: /data/proj/GCB_MB/CT/CTla_20_MB02
     clustering_params: 
       min_reads_log10: 2.5
       max_reads_log10: 4.2

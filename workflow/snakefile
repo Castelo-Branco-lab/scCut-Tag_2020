@@ -6,15 +6,43 @@ import sys
 
 rule all:
 	input:
-		expand("data/{sample}/bigwig/all_reads.bw",sample = [x for x in config['samples']])
+		# Bigwig files of raw mapped reads 
+		expand("results/{sample}/merged/bigwig/all_reads.bw",sample = [x for x in config['samples']]),
+
+		# MACS2 peak calling 
+		expand("results/{sample}/merged/macs/narrow/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
+
 
 
 rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
     output:
-        "data/{sample}/bigwig/all_reads.bw"
+        "results/{sample}/merged/bigwig/all_reads.bw"
     threads: 8
     shell:
         "bamCoverage -b {input} -o {output} -p {threads} --minMappingQuality 5 "
         " --binSize 100 --centerReads --smoothLength 500 --normalizeUsing RPKM --ignoreDuplicates"
+
+rule run_macs_narrow:
+    input:
+       lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    output:
+        "results/{sample}/merged/macs/narrow/{sample}_peaks.narrowPeak"
+    params:
+        macs_outdir = "results/{sample}/merged/macs/narrow"
+    shell:
+        "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
+        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
+        
+
+rule run_macs_broad:
+    input:
+        lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    output:
+        "results/{sample}/merged/macs/broad/{sample}_peaks.broadPeak"
+    params:
+        macs_outdir = "results/{sample}/merged/macs/broad"
+    shell:
+        "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
+        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 --broad-cutoff=0.1 --broad 2>&1 "
