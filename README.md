@@ -11,8 +11,11 @@ Code is organized in snakemake pipelines
 2. First preprocess snakemake pipeline is run to generate bulk tracks, cell barcode statistics and do cells identification
 3. Second snakemake pipeline contains R markdown notebooks used for the analysis
 
-##Step 1. 
+## Step 1. 
 
 Each sequencing run is processed separately with cellranger:
 
 `cellranger-atac count --fastqs=./fastq/ --reference=PATH_TO_CELLRANGER_REFERENCE_MM10 --sample=SEQUNCING_ID_ --id=SAMPLE_ID`
+
+
+bablabla
