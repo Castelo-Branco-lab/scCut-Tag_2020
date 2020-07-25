@@ -1,0 +1,24 @@
+import os
+import sys
+
+configfile: "config/config.yaml"
+
+
+# Create folder ./data
+if not os.path.isdir("data"):
+    os.mkdir("data")
+    
+# Link the source 10x files defined in config to ./data
+for key in config["samples"].keys():
+    
+    data_dir = config["samples"][key]
+    link_dir = " data/" + key
+
+    if not os.path.exists(link_dir):
+        shell("ln -sf {0} {1}".format(data_dir, link_dir))
+
+
+rule all:
+	pass
+
+	

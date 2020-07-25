@@ -1,6 +1,6 @@
 import os
 
-config_file = "config/config.yaml" 
+config_file = "config/step3/config.yaml" 
 configfile: config_file
 
 rule all:

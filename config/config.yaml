@@ -1,0 +1,36 @@
+H3K4me3:
+  samples:
+      H3K4me3_N1: /data/proj/GCB_MB/CT/CT_20_005
+        clustering_params: 
+          min_reads_log10: 3.7
+          max_reads_log10: 5.5
+          min_peaks_ratio: 0.5
+          max_peaks_ratio: 0.98
+        GFP: GFP+
+        Age: P25
+      H3K4me3_N2: /data/proj/GCB_MB/CT/CT_20_009
+        clustering_params: 
+          min_reads_log10: 3.7
+          max_reads_log10: 5.5
+          min_peaks_ratio: 0.5
+          max_peaks_ratio: 0.98
+        GFP: GFP+
+        Age: P25
+      H3K4me3_N3: /data/proj/GCB_MB/CT/CT_20_20_MB1
+        clustering_params: 
+          min_reads_log10: 2.5
+          max_reads_log10: 4.2
+          min_peaks_ratio: 0.5
+          max_peaks_ratio: 0.98
+        GFP: GFP+
+        Age: P15
+      H3K4me3_N4:
+        clustering_params: 
+          min_reads_log10: 2.5
+          max_reads_log10: 4.2
+          min_peaks_ratio: 0.5
+          max_peaks_ratio: 0.98
+        GFP: GFP-
+        Age: P15
+      
+  clustering_window: [250,1000,5000,25000,100000]
