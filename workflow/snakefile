@@ -11,6 +11,7 @@ rule all:
 
 		# MACS2 peak calling 
 		expand("results/{sample}/merged/macs/narrow/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
+		expand("results/{sample}/merged/macs/broad/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
 
 
 
