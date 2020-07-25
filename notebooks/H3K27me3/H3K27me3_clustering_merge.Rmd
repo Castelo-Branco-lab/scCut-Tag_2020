@@ -14,7 +14,6 @@ library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
 library(Signac,quietly = TRUE,warn.conflicts = FALSE)
 library(EnsDb.Mmusculus.v79,quietly = TRUE,warn.conflicts = FALSE)
 library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
-library(ggthemes,quietly = TRUE,warn.conflicts = FALSE)
 
 
 
@@ -261,9 +260,11 @@ markers <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot
 markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers)
 
+markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
 
 saveRDS(brain.merged,"results/H3K27me3/clustering/01.clustering.Rds")
-write.csv2(x = markers,file="results/H3K27me3/clustering/markers.csv")
+write.csv2(x = markers, file = "results/H3K27me3/clustering/markers.csv")
+write.csv2(x = markers.top, file = "results/H3K27me3/clustering/markers_top.csv")
 
 ```
 
@@ -310,7 +311,7 @@ exportBW <- function(object,cluster,fragments){
   coverage.x <- coverage(fragments.x)
   
   # Option A - normalize by number of reads per sample
-  coverage.x <- coverage.x/(length(fragments.x)/1000000)
+  coverage.x <- coverage.x/(length(fragments.x)/1e6)
   
   # Option B - normalize by mean signal (~ enrichment of mean signal)
   # coverage.x <- coverage.x / mean(unlist(coverage.x))
@@ -324,7 +325,7 @@ lapply(levels(brain.merged@active.ident),function(x){
 
 fragments.x <- fragments[fragments$name %in% colnames(brain.merged)]
 coverage.x  <- coverage(fragments.x) / length(fragments.x)
-rtracklayer::export.bw(object = coverage.x, con ="results/H3K27me3/clustering/bigwig/clusters_all.bw")
+rtracklayer::export.bw(object = coverage.x, con ="results/H3K27me3/clustering/bigwig/clusters_all/clusters_all.bw")
 
 ```
 
@@ -343,35 +344,29 @@ top.markers         <- as.data.frame(top.markers)
 top.markers         <- top.markers[order(top.markers$cluster),]
 
 
-dir.create("results/H3K27me3/clustering/markers_bed/")
+dir.create("results/H3K27me3/clustering/markers_bed/",recursive = TRUE)
 
 lapply(levels(top.markers$cluster),function(x){
   top.markers.x <- top.markers[top.markers$cluster == x,]
   top.markers.x <- sort(StringToGRanges(top.markers.x$gene))
-  rtracklayer::export.bed(object = top.markers.x,con = paste0("results/H3K27me3/clustering/markers_cluster_",x,".bed"))
+  rtracklayer::export.bed(object = top.markers.x,con = paste0("results/H3K27me3/clustering/markers_bed/markers_cluster_",x,".bed"))
 })
 
 bw.files <- list.files(path = "results/H3K27me3/clustering/bigwig/",pattern = "*.bw",full.names = TRUE)
 
-for(f in bw.files){
-  system(paste0("/usr/local/anaconda3/bin/computeMatrix reference-point   -S  ", f,  
-                                                                        " -R results/H3K27me3/clustering/markers_bed/*.bed", 
-                                                                         "-o results/H3K27me3/clustering/markers_bed/metagene_",gsub("\\.bw","\\.matrix",f),
-                                                                        " -a 10000 ", 
-                                                                        " -b 10000 ",
-                                                                        " -p 4"))
-}
+system(paste0("/usr/local/anaconda3/bin/computeMatrix reference-point   -S results/H3K27me3/clustering/bigwig/*.bw",  
+                                                                      " -R results/H3K27me3/clustering/markers_bed/*.bed", 
+                                                                      " -o results/H3K27me3/clustering/markers_bed/metagene_matrix.txt.gz",
+                                                                      " -a 10000 ", 
+                                                                      " -b 10000 ",
+                                                                      " -p 4",sep= ' '))
 
- for(f in bw.files){
- system(paste0("/usr/local/anaconda3/bin/plotHeatmap   -m results/H3K27me3/clustering/markers_bed/metagene_", gsub("\\.bw","\\.matrix",f), 
-                                                     " -o results/H3K27me3/clustering/markers_bed/metagene_", gsub("\\.bw","\\.png",f), 
-                                                     " --sortRegions no",
-                                                     " --zMin 20",
-                                                     " --colorList Darkblue,white,red",
-                                                     " --refPointLabel peak",
-                                                     " --heatmapWidth 10",
-                                                     " --heatmapHeight 50"))
-}
+
+system(paste0("/usr/local/anaconda3/bin/plotHeatmap   -m results/H3K27me3/clustering/markers_bed/metagene_matrix.txt.gz", 
+                                                    " -o results/H3K27me3/clustering/markers_bed/metagene_matrix.pdf", 
+                                                    " --sortRegions no",
+                                                    " --colorList Darkblue,white,red",
+                                                    " --refPointLabel peak",sep = ' '))
 
 ```
 
