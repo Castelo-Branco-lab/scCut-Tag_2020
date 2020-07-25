@@ -10,7 +10,7 @@ rule all:
 		expand("results/{sample}/merged/bigwig/all_reads.bw",sample = [x for x in config['samples']]),
 
 		# MACS2 peak calling 
-		expand("results/{sample}/merged/macs/narrow/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
+		expand("results/{sample}/merged/macs/narrow/{sample}_peaks.narrowPeak",sample = [x for x in config['samples']]),
 		expand("results/{sample}/merged/macs/broad/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
 
 
