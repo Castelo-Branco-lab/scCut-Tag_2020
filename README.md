@@ -15,4 +15,4 @@ Step 1.
 
 Each sequencing run is processed separately with cellranger:
 
-`<cellranger-atac count --fastqs=./fastq/ --reference=PATH_TO_CELLRANGER_REFERENCE_MM10 --sample=SEQUNCING_ID_ --id=SAMPLE_ID>`
+`cellranger-atac count --fastqs=./fastq/ --reference=PATH_TO_CELLRANGER_REFERENCE_MM10 --sample=SEQUNCING_ID_ --id=SAMPLE_ID`
