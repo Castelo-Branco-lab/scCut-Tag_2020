@@ -1,0 +1,17 @@
+samples:
+    Olig2_N1: /data/proj/GCB_MB/CT/CT_20_003
+    Olig2_N2: /data/proj/GCB_MB/CT/CT_20_010
+
+MEME_npeaks: [1000,5000,10000,25000,50000,100000]
+binwidth: [500,2500,5000,25000,50000]
+
+clustering_params: 
+    min_reads_log10: 3.0
+    max_reads_log10: 5.5
+    min_peaks_ratio: 0.25
+    max_peaks_ratio: 1.0
+    
+
+clustering_downstream: [500,2500,5000,25000,50000]
+genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"
+

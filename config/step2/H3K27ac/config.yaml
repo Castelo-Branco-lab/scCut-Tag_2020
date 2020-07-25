@@ -1,0 +1,14 @@
+samples:
+    H3K27ac_N1: /data/proj/GCB_MB/CT/CT_19_001
+    H3K27ac_N2: /data/proj/GCB_MB/CT/CT_19_002
+
+binwidth: [1000,5000,25000,50000]
+
+clustering_params: 
+    min_reads_log10: 3.5
+    max_reads_log10: 5.5
+    min_peaks_ratio: 0.15
+    max_peaks_ratio: 0.9
+    
+
+    
