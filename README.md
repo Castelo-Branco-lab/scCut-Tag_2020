@@ -20,13 +20,24 @@ Each sequencing run is processed separately with cellranger:
 
 ## Step 2.
 
+### Prepare 
+
 Clone git repo
+
 `git clone https://github.com/mardzix/scCut-Tag_2020/master`
 
 Create conda environment with all necessary tools installed by:
+
 `conda env create -f scCut-Tag_2020/envs/CT_snakemake.yaml `
 
-Provide cell ranger oudput folder to snakemake pipeline step2.Snakemake
+
+### Modify config files
+
+Modify config files in scCut-Tag_2020/config/step2/ to specify path to cellranger output files for individual samples
+
+Run Snakemake
+``
+
 
 
 

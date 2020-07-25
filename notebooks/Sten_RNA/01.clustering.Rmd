@@ -56,6 +56,12 @@ sten.RNA <- CreateSeuratObject(counts = mat.t,project = "Sten_RNA",assay = "RNA"
 rm(mat)
 ```
 
+```{r remove_after_debuging}
+saveRDS(object = sten.RNA,file = "sten_RNA_temp.Rds")
+dir.create("results/Sten_RNA/clustering",recursive = TRUE)
+
+```
+
 
 ```{r cluster}
 sten.RNA$ClusterName <- factor(sten.RNA$ClusterName,levels=unique(sten.RNA$ClusterName))

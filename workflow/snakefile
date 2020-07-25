@@ -1,24 +1,20 @@
 import os
 import sys
 
-configfile: "config/config.yaml"
-
-
-# Create folder ./data
-if not os.path.isdir("data"):
-    os.mkdir("data")
-    
-# Link the source 10x files defined in config to ./data
-for key in config["samples"].keys():
-    
-    data_dir = config["samples"][key]
-    link_dir = " data/" + key
-
-    if not os.path.exists(link_dir):
-        shell("ln -sf {0} {1}".format(data_dir, link_dir))
+#configfile: "scCT_snakemake_final/config/config.yaml"
 
 
 rule all:
-	pass
+	input:
+		expand("data/{sample}/bigwig/all_reads.bw",sample = [x for x in config['samples']])
 
-	
+
+rule bam_to_bw:
+    input:
+        lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    output:
+        "data/{sample}/bigwig/all_reads.bw"
+    threads: 8
+    shell:
+        "bamCoverage -b {input} -o {output} -p {threads} --minMappingQuality 5 "
+        " --binSize 100 --centerReads --smoothLength 500 --normalizeUsing RPKM --ignoreDuplicates"

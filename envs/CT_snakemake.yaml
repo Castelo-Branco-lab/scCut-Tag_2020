@@ -5,7 +5,7 @@ channels:
   - defaults
 dependencies:
   - python=3.6
-  - macs=2.2.7.1
+  - macs2=2.2.7.1
   - samtools=1.9
   - htslib=1.9
   - deeptools=3.4.3
