@@ -1,0 +1,305 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  params:
+    config: 'config/config.yaml'
+---
+
+```{r}
+library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
+library(gridExtra,quietly = TRUE,warn.conflicts = FALSE)
+library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
+library(Signac,quietly = TRUE,warn.conflicts = FALSE)
+library(EnsDb.Mmusculus.v79,quietly = TRUE,warn.conflicts = FALSE)
+library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
+library(ggthemes,quietly = TRUE,warn.conflicts = FALSE)
+
+set.seed(100)
+```
+
+
+
+```{r set_root_dir}
+setwd('../../')
+knitr::opts_knit$set(root.dir = getwd())
+```
+# Read config
+
+```{r read_config}
+config <- yaml::read_yaml(params$config)
+```
+
+```{r load_annotation}
+gene.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "protein_coding")
+lncRNA.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "lincRNA")
+gene.coords <- c(gene.coords,lncRNA.coords)
+
+seqlevelsStyle(gene.coords) <- 'UCSC'
+genebody.coords <- keepStandardChromosomes(gene.coords, pruning.mode = 'coarse')
+
+# Flatten the overlapping genes and extend by 2kb upstream of promoters
+genebody.coords.flat <- GenomicRanges::reduce(x = genebody.coords)
+genebodyandpromoter.coords.flat <- Signac::Extend(genebody.coords.flat,upstream = 2000)
+
+# Retrieve gene names from the original annotation (lost because of flatenning)
+genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.coords.flat,genebody.coords)]$gene_name
+```
+
+# Reduce dimensionality with LSI and plot the loadings
+
+```{r load_Seurat, fig.width=3,fig.height=3}
+assay = "peaksMB"
+brain <- readRDS(config$input$H3K27ac$`P25_GFP+`$seurat_object)
+FeaturePlot(brain,features = 'blacklist_region_fragments',max.cutoff = 3) + ggtitle('blacklist fragments')
+DimPlot(brain) + ggtitle("Clustering_preprocesses")
+ggplot(data=brain@meta.data) + geom_boxplot(aes(x=seurat_clusters,y=blacklist_region_fragments)) + theme_base() + ggtitle('blacklist fragments per cluster')
+FeaturePlot(object = brain,features = 'promoter_ratio',max.cutoff=0.5) + ggtitle('promoter ratio')
+```
+
+
+```{r blacklist_filter}
+blacklist.overlaps <- subsetByOverlaps(x = StringToGRanges(rownames(brain)),ranges =   blacklist_mm10,type = 'any')
+blacklist.bins     <- which(rownames(brain) %in% GRangesToString(blacklist.overlaps))
+
+blacklist.cells    <- colnames(brain[,brain$blacklist_region_fragments > 2])
+blacklist.cells    <- which(colnames(brain) %in% blacklist.cells)
+
+GA.mat             <- brain[['GA']]@counts
+
+# Remove blacklisted cells and whole clusters 8 and 9, they mess up clustering if left there + blacklist overlapping features
+brain <- brain[-blacklist.bins,-blacklist.cells]
+brain <- brain[,!brain@active.ident %in% c(8,9)]
+
+brain[['GA']] <- CreateAssayObject(counts = GA.mat[,colnames(brain)])
+
+FeaturePlot(brain,'blacklist_region_fragments')
+
+```
+
+
+```{r UMI_filter}
+brain <- brain[,brain$logUMI > 2]
+
+```
+
+
+```{r runSVD, fig.width=3,fig.height=6}
+brain <- RenameAssays(brain,c('peaksMB'='bins_5kb'))
+
+brain <- RunTFIDF(brain)
+brain <- FindTopFeatures(brain, min.cutoff = 'q50')
+
+brain <- RunSVD(
+  object = brain,
+  assay = 'bins_5kb',
+  reduction.key = 'LSI_',
+  reduction.name = 'lsi',
+  n = 50
+)
+
+DimHeatmap(brain, reduction='lsi',dims=1:25,cells=500,balanced = TRUE,projected = FALSE,slot="data")
+
+```
+
+
+
+
+```{r runUMAP,fig.width=8,fig.height=4}
+brain <- RunUMAP(
+  object = brain,
+  reduction = 'lsi',
+  dims = 2:50
+)
+
+brain <- FindNeighbors(
+  object = brain,
+  reduction = 'lsi',
+  dims = 2:50
+)
+brain <- FindClusters(
+  object = brain,
+  algorithm = 3,
+  resolution = 0.2,
+  verbose = FALSE
+)
+
+p1 <- DimPlot(object = brain, label = TRUE,reduction = 'umap') + NoLegend()
+p2 <- DimPlot(brain,group.by='sample')
+
+FeaturePlot(brain,'logUMI',min.cutoff = 2) + scale_color_viridis_c()
+p1 + p2
+```
+
+
+```{r,fig.width=8,fig.height=4}
+brain <- RenameIdents(brain, '1' = 'Astrocytes','0'='mOL','3'='mOL','2'= 'VLMC', '4'= 'OEC','5' = 'OPC')
+
+p1 <- DimPlot(object = brain,group.by='sample', label = TRUE,reduction = 'umap')
+p2 <- DimPlot(object = brain, label = TRUE,reduction = 'umap')
+
+p1 + p2
+```
+
+```{r}
+brain <- NormalizeData(brain,normalization.method = 'LogNormalize',scale.factor=10000)
+markers <- FindAllMarkers(brain,min.pct = 0.025,logfc.threshold = 0.1,slot = 'data')
+
+markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
+#View(markers)
+
+markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+
+saveRDS(brain, "results/H3K27ac/clustering/01.clustering.Rds")
+write.csv2(x = markers,file="results/H3K27ac/clustering/markers.csv")
+write.csv2(x = markers.top,file="results/H3K27ac/clustering/markers_top.csv")
+
+```
+
+```{r}
+fragments <- config$input$H3K27ac$`P25_GFP+`$fragments
+fragments <- rtracklayer::import(fragments,format = "bed")
+
+chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
+chrom.sizes <- chrom.sizes[1:21,]
+
+new_read <- GRanges(seqnames = chrom.sizes[,1], 
+          ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
+                          width=1),
+          name = "in_silico_extra_read",
+          score = 0
+          )
+
+exportBW <- function(object,cluster,fragments){
+  if(class(object) == "Seurat"){
+    cells <- rownames(object@meta.data[object@active.ident == cluster,])
+  }
+  
+  fragments.x <- fragments$name %in% cells
+  fragments.x <- fragments[fragments.x]
+  fragments.x <- c(fragments.x,new_read)
+  
+  coverage.x <- coverage(fragments.x)
+  coverage.x <- coverage.x / (length(fragments.x) /1e6)
+  rtracklayer::export.bw(object = coverage.x,paste0("results/H3K27ac/clustering/bigwig/cluster_",cluster,".bw"))
+  
+}
+
+lapply(levels(brain@active.ident),function(x){
+  exportBW(brain,x,fragments)
+})
+
+fragments.x <- fragments[fragments$name %in% colnames(brain)]
+coverage.x  <- coverage(fragments.x) / length(fragments.x)
+rtracklayer::export.bw(object = coverage.x, con ="results/H3K27ac/clustering/bigwig/clusters_all/clusters_all.bw")
+
+
+```
+
+
+# Export marker bed file 
+
+```{r do_metagene}
+clusters_order = levels(brain@active.ident)
+
+# Get top markers
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(500, wt=avg_logFC)
+
+# Reorder markers
+top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])
+
+top.markers         <- as.data.frame(top.markers)
+top.markers         <- top.markers[order(top.markers$cluster),]
+
+
+# dir.create("results/H3K27ac/clustering/markers_bed/",recursive = TRUE)
+
+lapply(levels(top.markers$cluster),function(x){
+  top.markers.x <- top.markers[top.markers$cluster == x,]
+  top.markers.x <- sort(StringToGRanges(top.markers.x$gene))
+  rtracklayer::export.bed(object = top.markers.x,con = paste0("results/H3K27ac/clustering/markers_bed/markers_cluster_",x,".bed"))
+})
+
+bw.files <- list.files(path = "results/H3K27me3/clustering/bigwig/",pattern = "*.bw",full.names = TRUE)
+
+system(paste0("/usr/local/anaconda3/bin/computeMatrix reference-point   -S results/H3K27ac/clustering/bigwig/*.bw",  
+                                                                      " -R results/H3K27ac/clustering/markers_bed/*.bed", 
+                                                                      " -o results/H3K27ac/clustering/markers_bed/metagene_matrix.txt.gz",
+                                                                      " -a 10000 ", 
+                                                                      " -b 10000 ",
+                                                                      " -p 4",sep= ' '))
+
+
+ system(paste0("/usr/local/anaconda3/bin/plotHeatmap   -m results/H3K27ac/clustering/markers_bed/metagene_matrix.txt.gz", 
+                                                     " -o results/H3K27ac/clustering/markers_bed/metagene_matrix.pdf", 
+                                                     " --sortRegions no",
+                                                     " --colorList Darkblue,white,red",
+                                                     " --refPointLabel peak",sep = ' '))
+
+```
+
+
+
+```{r}
+
+DoHeatmapMB <- function(object, markers,fraction = 0.2,slot = "data",assay="bins_5kb", clusterColors){
+  
+  object <- object[,sample(colnames(object),length(colnames(object)) * fraction)]
+  
+  row_annotation.df           <- data.frame(markers=markers$cluster)
+  rownames(row_annotation.df) <- markers$gene
+  col_annotation.df           <- data.frame(clusters=Idents(object))
+  col_annotation.df$sample    <- object$sample
+  col_annotation.df           <- col_annotation.df[order(col_annotation.df$clusters,col_annotation.df$sample),]
+  
+  heatmap.mat <- GetAssayData(object = object, slot,assay = assay)
+  heatmap.mat <- heatmap.mat[rownames(row_annotation.df),rownames(col_annotation.df)]
+  
+  print(dim(heatmap.mat))
+  
+  pheatmap::pheatmap(heatmap.mat,
+                     cluster_cols = FALSE, 
+                     cluster_rows = FALSE,
+                     annotation_row = row_annotation.df,
+                     annotation_col = col_annotation.df,
+                     color = viridis::viridis(256),
+                     show_rownames = FALSE,
+                     show_colnames = FALSE,
+                     labels_col = "",labels_row = "",
+                     annotation_colors = clusterColors)
+}
+
+ncells        <- dim(brain)[2]
+cells_to_plot <- colnames(brain)[sample(1:ncells,ncells * 0.4)]
+cells_to_plot <- tibble::rownames_to_column(brain[,cells_to_plot]@meta.data) %>% arrange(seurat_clusters,sample) %>% pull(rowname)
+clusters_order <- levels(brain@active.ident)
+
+# Get top markers
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(100, wt=avg_logFC)
+top.markers <- top.markers[which(!top.markers$gene %in% names(table(top.markers$gene)[table(top.markers$gene) > 1])),] # remove non-unique
+
+# Reorder markers
+top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order)
+top.markers         <- top.markers[order(top.markers$cluster),]
+
+# Reorder cells
+Idents(brain) <- factor(as.character(Idents(brain)),levels=clusters_order)
+
+# Create list of cluster colors
+clusterColors <- rep(list(scales::hue_pal()(length(levels(brain@active.ident)))),2)
+names(clusterColors) <- c("markers","clusters")
+  
+names(clusterColors[[1]]) <- levels(brain@active.ident)
+names(clusterColors[[2]]) <- levels(brain@active.ident)
+
+
+png(filename = "results/H3K27ac/clustering/bins_heatmap.png",width=1000,height=1000)
+DoHeatmapMB(brain,
+            markers = top.markers,
+            clusterColors = clusterColors,
+            slot = 'data')
+dev.off()
+
+
+```
