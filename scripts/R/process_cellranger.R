@@ -4,17 +4,16 @@ library(argparse);
 library(Seurat);
 library(Signac);
 library(EnsDb.Mmusculus.v79);
-library(EnsDb.Hsapiens.v86);
+library(EnsDb.Hsapiens.v86)
 library(viridis);
 library(ggplot2);
 library(dplyr);
 library(gridExtra);
-library(BSgenome.Mmusculus.UCSC.mm10);}
+# library(BSgenome.Mmusculus.UCSC.mm10);
+  }
 )
 
 set.seed(1234)
-rm(list=ls())
-
 
 ########### Arguments parser
 
@@ -35,7 +34,7 @@ parser$add_argument("-r", "--peaks_max", type="double", default=0.7,
 parser$add_argument("-d", "--ndim", type="integer", default=30, 
                     help="maximum number of reads in cell")
 
-parser$add_argument("-c", "--res_cluster", type="double", default=0.2, 
+parser$add_argument("-c", "--config", type="character", default='config/config.yaml', 
                     help="maximum number of reads in cell")
 
 parser$add_argument("-o", "--out_prefix", type="character", default="100000_UMI", 
@@ -62,33 +61,34 @@ parser$add_argument("-1", "--cells_selection", type="logical", default=FALSE,
 args <- parser$parse_args()
 print(args)
 
-cutoff_reads_min            = 10^args$reads_min
-cutoff_reads_max            = 10^args$reads_max
-cutoff_peak_percentage_low  = args$peaks_min
-cutoff_peak_percentage_high = args$peaks_max
+config <- yaml::read_yaml(args$config)
 
-ndim = args$ndim
-res_clustering = args$res_cluster
-window = args$window
+
+cutoff_reads_min            = config$samples[[args$sample]]$clustering_params$min_reads_log10
+cutoff_reads_max            = config$samples[[args$sample]]$clustering_params$max_reads_log10
+cutoff_peak_percentage_low  = config$samples[[args$sample]]$clustering_params$min_peaks_ratio
+cutoff_peak_percentage_high = config$samples[[args$sample]]$clustering_params$max_peaks_ratio
+
+ndim = 30
+feature = args$feature
+window  = args$window
 
 fragments <- args$fragments_file
 assay = "peaksMB"
 
 
-##############################################################
-dir.create("clustering_snakemake/01.clustering/figures",recursive=TRUE)
 
 ###############################################################
 
-if(grepl("monod.*.mbb.ki.se", Sys.info()["nodename"])) {
-  Sys.setenv(PATH=paste0('/home/marek/anaconda3/envs/CT/bin:', Sys.getenv('PATH')))
-  Sys.setenv(RETICULATE_PYTHON = "/home/marek/anaconda3/envs/CT/bin/python")
-}
+#if(grepl("monod.*.mbb.ki.se", Sys.info()["nodename"])) {
+#  Sys.setenv(PATH=paste0('/home/marek/anaconda3/envs/CT/bin:', Sys.getenv('PATH')))
+#  Sys.setenv(RETICULATE_PYTHON = "/home/marek/anaconda3/envs/CT/bin/python")
+#}
 
-if(Sys.info()["nodename"] == "KI-DGKT5HVTGG7F"){
-  Sys.setenv(PATH=paste0('/usr/local/anaconda3/bin:', Sys.getenv('PATH')))
-  Sys.setenv(RETICULATE_PYTHON = "/usr/local/anaconda3/bin/python3")
-}
+#if(Sys.info()["nodename"] == "KI-DGKT5HVTGG7F"){
+#  Sys.setenv(PATH=paste0('/usr/local/anaconda3/bin:', Sys.getenv('PATH')))
+#  Sys.setenv(RETICULATE_PYTHON = "/usr/local/anaconda3/bin/python3")
+#}
 ###############################################################
 
 #### Read annotation
@@ -345,7 +345,7 @@ brain <- FindNeighbors(
 brain <- FindClusters(
   object = brain,
   algorithm = "leiden",
-  resolution = res_clustering,
+  resolution = 0.3,
   verbose = TRUE
 )
 
