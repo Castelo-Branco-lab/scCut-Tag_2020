@@ -63,4 +63,4 @@ samples:
     Antibody: H3K27me3
 
 general:
-  clustering_window: [250,1000,5000,25000,100000]
+  clustering_window: [250,1000,5000,25000,100000,'peaks']

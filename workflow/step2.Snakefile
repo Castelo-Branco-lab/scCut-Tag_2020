@@ -7,7 +7,6 @@ configfile: "config.yaml"
 # Linking with a rule did not work for me
 # So here is python code to linkg the files
 
-
 # Create folder ./data
 if not os.path.isdir("data"):
     os.mkdir("data")

@@ -6,6 +6,7 @@ channels:
 dependencies:
   - python=3.6
   - snakemake
+  - htcondor
   - graphviz
   - pyyaml
   - macs2=2.2.7.1
@@ -17,5 +18,13 @@ dependencies:
   - r-base=3.6.3
   - r-seurat=3.1.5
   - r-dplyr=0.8.5
+  - r-argparse=2.0.1
+  - r-viridis
+  - r-ggplot2
+  - r-gridextra
+  - bioconductor-ensdb.mmusculus.v79
+  - bioconductor-ensdb.hsapiens.v86
+  
+  
   
   
