@@ -1,6 +1,11 @@
 import os
 import sys
 
+shell.executable("/bin/bash")
+shell.prefix("source ~/.bashrc; ")
+
+config_file = 'scCut-Tag_2020/config/config.yaml' 
+configfile: config_file
 
 samples_list    = [x for x in config['samples']]
 antibody_list   = [config['samples'][x]['Antibody'] for x in config['samples'].keys()]
@@ -10,20 +15,26 @@ d = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
 for x in config['samples'].keys():
    d[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
 
+
+
+
 rule all:
-	input:
+  input:
 		# Bigwig files of raw mapped reads 
-		expand("results/{sample}/bigwig/all_reads.bw",sample = samples_list),
+    expand("results/{sample}/bigwig/all_reads.bw",sample = samples_list),
 
 		# MACS2 peak calling 
-		expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_list),
-		expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_list),
+    expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_list),
+    expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_list),
 
-        # Merged files accross replicates
-        expand("results/merged/{antibody}/possorted_bam.bam", antibody = list(set(antibody_list))),
+    # Merged files accross replicates
+    expand("results/merged/{antibody}/possorted_bam.bam", antibody = list(set(antibody_list))),
 
-        #Clustering
-         expand("results/{sample}/matrix/Seurat_{binwidth}.Rds",binwidth = config['general']['clustering_window'],sample = samples_list)
+    # Barcode statistics for cell selection
+    expand("results/{sample}/barcode_statistics/barcode_statistics_{x}.log",sample = samples_list,x=['peaks','all'])
+
+    #Clustering
+    #expand("results/{sample}/cell_selection/Seurat_{binwidth}.Rds",binwidth = config['general']['clustering_window'],sample = samples_list),
 
 
 
@@ -69,20 +80,41 @@ rule barcode_statistics_peaks:
         peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
         peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     output:
-        log    = "results/{sample}/barcode_statistics_peaks.log",
-        narrow = "barcode_statistics/{sample}/peaks_barcodes_narrow.txt",
-        broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt"
+        log    = "results/{sample}/barcode_statistics/barcode_statistics_peaks.log",
+        narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
+        broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt"
     params:
         out_narrow = "barcode_statistics/{sample}/peaks_barcodes_narrow.txt",
-        out_broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt"
+        out_broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt",
+        scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+
     conda: '../envs/CT_snakemake.yaml'
     shell:
+        "set +o pipefail; "
         "(bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
-        " awk -f ~/bin/snaptools_scripts/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {output.broad} && "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.broad} && "
         " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
-        " awk -f ~/bin/snaptools_scripts/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {output.narrow} ) "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.narrow} ) "
         " 2> {output.log} &&"
         " echo 'DONE' >> {output.log} "
+
+rule barcode_statistics_all:
+  input:
+     bam       = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+  output:
+    log        = "results/{sample}/barcode_statistics/barcode_statistics_all.log",
+    out_narrow = "results/{sample}/barcode_statistics/all_barcodes_narrow.txt",
+    out_broad  = "results/{sample}/barcode_statistics/all_barcodes_broad.txt"
+  params:
+    out_narrow = "barcode_statistics/{sample}/all_barcodes_narrow.txt",
+    out_broad  = "barcode_statistics/{sample}/all_barcodes_broad.txt",
+    scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+  shell:
+    " set +o pipefail; "
+    " samtools view -f2 {input.bam} | "
+    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {params.out_broad} && "
+    " 2> {output.log}; "
+    " echo 'DONE' >> {output.log} "
 
 rule merge_bam:
     input:
@@ -90,16 +122,17 @@ rule merge_bam:
     output:
         "results/merged/{antibody}/possorted_bam.bam"
     conda: '../envs/CT_snakemake.yaml'
+    threads: 8
     shell:
-        "samtools merge {output} {input}"
-
+        "samtools merge --threads {threads} {output} {input}"    
 
 rule cell_selection:
   input:
       peaks           = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
       fragments_file   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
   output:
-      "results/{sample}/matrix/Seurat_{binwidth}.Rds",
+      "results/{sample}/cell_selection/Seurat_{binwidth}.Rds",
+  conda: '../envs/CT_snakemake.yaml'
   params:
       min_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['min_reads_log10']),
       max_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['max_reads_log10']),
@@ -109,27 +142,12 @@ rule cell_selection:
       feature        = lambda wildcards:        "peaks" if wildcards.binwidth == "peaks" else "bins --window " + str(wildcards.binwidth),
       script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
       binwidth       = "{binwidth}",
+      out_prefix     = "results/{sample}/cell_selection/",
+      config_file    = config_file,
+      sample         = "{sample}",
 
   shell:
-      "Rscript {params.script}  --reads_min {params.min_reads} "
-                                                                                  "--reads_max {params.max_reads} "
-                                                                                  "--peaks_min {params.min_peaks} "
-                                                                                  "--peaks_max {params.max_peaks} "
-                                                                                  "--feature {params.feature} "
-                                                                                  "--fragments_file {input.fragments_file} "
-                                                                                  "--window {params.binwidth} "
-                                                                                  "--out_prefix {output} "
-                                                                                  "{params.peaks_file} "
-
-
-
-
-
-
-
-
-
-
+      "Rscript {params.script}  --sample {params.sample} --config {params.config_file} --out_prefix {params.out_prefix} --feature {params.feature}"
 
 
 
