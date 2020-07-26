@@ -5,6 +5,7 @@ channels:
   - defaults
 dependencies:
   - python=3.6
+  - graphviz
   - macs2=2.2.7.1
   - samtools=1.9
   - htslib=1.9
