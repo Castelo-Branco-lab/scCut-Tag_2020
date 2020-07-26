@@ -1,17 +1,29 @@
 import os
 import sys
 
-#configfile: "scCT_snakemake_final/config/config.yaml"
 
+samples_list    = [x for x in config['samples']]
+antibody_list   = [config['samples'][x]['Antibody'] for x in config['samples'].keys()]
+
+# Create antibody: path to cellranger mapping for expand
+d = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+for x in config['samples'].keys():
+   d[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
 
 rule all:
 	input:
 		# Bigwig files of raw mapped reads 
-		expand("results/{sample}/merged/bigwig/all_reads.bw",sample = [x for x in config['samples']]),
+		expand("results/{sample}/bigwig/all_reads.bw",sample = samples_list),
 
 		# MACS2 peak calling 
-		expand("results/{sample}/merged/macs/narrow/{sample}_peaks.narrowPeak",sample = [x for x in config['samples']]),
-		expand("results/{sample}/merged/macs/broad/{sample}_peaks.broadPeak",sample = [x for x in config['samples']])
+		expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_list),
+		expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_list),
+
+        # Merged files accross replicates
+        expand("results/merged/{antibody}/possorted_bam.bam", antibody = list(set(antibody_list))),
+
+        #Clustering
+         expand("results/{sample}/matrix/Seurat_{binwidth}.Rds",binwidth = config['general']['clustering_window'],sample = samples_list)
 
 
 
@@ -19,8 +31,9 @@ rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
     output:
-        "results/{sample}/merged/bigwig/all_reads.bw"
+        "results/{sample}/bigwig/all_reads.bw"
     threads: 8
+    conda: '../envs/CT_snakemake.yaml'
     shell:
         "bamCoverage -b {input} -o {output} -p {threads} --minMappingQuality 5 "
         " --binSize 100 --centerReads --smoothLength 500 --normalizeUsing RPKM --ignoreDuplicates"
@@ -29,9 +42,10 @@ rule run_macs_narrow:
     input:
        lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
     output:
-        "results/{sample}/merged/macs/narrow/{sample}_peaks.narrowPeak"
+        "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     params:
-        macs_outdir = "results/{sample}/merged/macs/narrow"
+        macs_outdir = "results/{sample}/macs/narrow"
+    conda: '../envs/CT_snakemake.yaml'
     shell:
         "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
         "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
@@ -41,9 +55,108 @@ rule run_macs_broad:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
     output:
-        "results/{sample}/merged/macs/broad/{sample}_peaks.broadPeak"
+        "results/{sample}/macs/broad/{sample}_peaks.broadPeak"
     params:
-        macs_outdir = "results/{sample}/merged/macs/broad"
+        macs_outdir = "results/{sample}/macs/broad"
+    conda: '../envs/CT_snakemake.yaml'
     shell:
         "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
         "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 --broad-cutoff=0.1 --broad 2>&1 "
+
+rule barcode_statistics_peaks:
+    input:
+        bam          = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+        peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
+        peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
+    output:
+        log    = "results/{sample}/barcode_statistics_peaks.log",
+        narrow = "barcode_statistics/{sample}/peaks_barcodes_narrow.txt",
+        broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt"
+    params:
+        out_narrow = "barcode_statistics/{sample}/peaks_barcodes_narrow.txt",
+        out_broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt"
+    conda: '../envs/CT_snakemake.yaml'
+    shell:
+        "(bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
+        " awk -f ~/bin/snaptools_scripts/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {output.broad} && "
+        " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
+        " awk -f ~/bin/snaptools_scripts/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {output.narrow} ) "
+        " 2> {output.log} &&"
+        " echo 'DONE' >> {output.log} "
+
+rule merge_bam:
+    input:
+        lambda wildcards: [x + '/outs/possorted_bam.bam' for x in d[wildcards.antibody] ]
+    output:
+        "results/merged/{antibody}/possorted_bam.bam"
+    conda: '../envs/CT_snakemake.yaml'
+    shell:
+        "samtools merge {output} {input}"
+
+
+rule cell_selection:
+  input:
+      peaks           = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
+      fragments_file   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
+  output:
+      "results/{sample}/matrix/Seurat_{binwidth}.Rds",
+  params:
+      min_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['min_reads_log10']),
+      max_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['max_reads_log10']),
+      min_peaks      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['min_peaks_ratio']),
+      max_peaks      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['max_peaks_ratio']),
+      peaks_file     = lambda wildcards, input: "--peaks_file  " + input.peaks if wildcards.binwidth == "peaks" else "",
+      feature        = lambda wildcards:        "peaks" if wildcards.binwidth == "peaks" else "bins --window " + str(wildcards.binwidth),
+      script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
+      binwidth       = "{binwidth}",
+
+  shell:
+      "Rscript {params.script}  --reads_min {params.min_reads} "
+                                                                                  "--reads_max {params.max_reads} "
+                                                                                  "--peaks_min {params.min_peaks} "
+                                                                                  "--peaks_max {params.max_peaks} "
+                                                                                  "--feature {params.feature} "
+                                                                                  "--fragments_file {input.fragments_file} "
+                                                                                  "--window {params.binwidth} "
+                                                                                  "--out_prefix {output} "
+                                                                                  "{params.peaks_file} "
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

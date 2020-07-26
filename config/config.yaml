@@ -8,6 +8,7 @@ samples:
       max_peaks_ratio: 0.98
     GFP: GFP+
     Age: P25
+    Antibody: H3K4me3
   H3K4me3_N2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_009
     clustering_params: 
@@ -17,6 +18,7 @@ samples:
       max_peaks_ratio: 0.98
     GFP: GFP+
     Age: P25
+    Antibody: H3K4me3
   H3K4me3_N3: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01
     clustering_params: 
@@ -26,6 +28,7 @@ samples:
       max_peaks_ratio: 0.98
     GFP: GFP+
     Age: P15
+    Antibody: H3K4me3
   H3K4me3_N4: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB02
     clustering_params: 
@@ -35,6 +38,7 @@ samples:
       max_peaks_ratio: 0.98
     GFP: GFP-
     Age: P15
+    Antibody: H3K4me3
         
   
   H3K27me3_N1: 
@@ -46,6 +50,7 @@ samples:
       max_peaks_ratio: 0.75
     GFP: GFP+
     Age: P25
+    Antibody: H3K27me3
   H3K27me3_N2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_006
     clustering_params: 
@@ -55,6 +60,7 @@ samples:
       max_peaks_ratio: 0.75
     GFP: GFP+
     Age: P25
+    Antibody: H3K27me3
 
 general:
   clustering_window: [250,1000,5000,25000,100000]

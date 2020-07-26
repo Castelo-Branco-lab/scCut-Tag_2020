@@ -5,7 +5,9 @@ channels:
   - defaults
 dependencies:
   - python=3.6
+  - snakemake
   - graphviz
+  - pyyaml
   - macs2=2.2.7.1
   - samtools=1.9
   - htslib=1.9
@@ -14,4 +16,7 @@ dependencies:
   - picard=2.22.0
   - r-base=3.6.3
   - r-seurat=3.1.5
-  - r-essentials
+  - r-dplyr=0.8.5
+  - r-argparse=2.0.1
+  
+  
