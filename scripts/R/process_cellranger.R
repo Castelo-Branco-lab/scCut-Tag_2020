@@ -227,7 +227,7 @@ seurat_object[['peaks']] <- CreateAssayObject(counts = counts.matrix.peaks[,coln
 
 # Filter blacklist cells
 seurat_object$blacklist_ratio <- seurat_object$blacklist_region_fragments / seurat_object$all_unique_MB
-seurat_object                 <- seurat_object[,seurat_object$blacklist_region_fragments > 5]
+seurat_object                 <- seurat_object[,seurat_object$blacklist_region_fragments < 5]
 
 # Add sample id to cell names
 seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
