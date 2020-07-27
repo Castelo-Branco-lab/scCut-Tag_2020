@@ -42,6 +42,14 @@ parser$add_argument("-w", "--window", type="integer", default=10000,
                     help="width of the genome window (if -t bins)")
 
 args <- parser$parse_args()
+
+# args <- list()
+# args$sample     <- "H3K27me3_N1"
+# args$config     <- "scCut-Tag_2020/config/config.yaml"
+# args$out_prefix <- "results/H3K27me3_N1/cell_picking/5000/"
+# args$window     <- 5000
+
+
 print(args)
 
 config <- yaml::read_yaml(args$config)
@@ -60,18 +68,6 @@ assay = "peaksMB"
 
 
 if (!file.exists(fragments)) {stop(paste0("Fragments file does not exist: ",fragments))}
-###############################################################
-
-#if(grepl("monod.*.mbb.ki.se", Sys.info()["nodename"])) {
-#  Sys.setenv(PATH=paste0('/home/marek/anaconda3/envs/CT/bin:', Sys.getenv('PATH')))
-#  Sys.setenv(RETICULATE_PYTHON = "/home/marek/anaconda3/envs/CT/bin/python")
-#}
-
-#if(Sys.info()["nodename"] == "KI-DGKT5HVTGG7F"){
-#  Sys.setenv(PATH=paste0('/usr/local/anaconda3/bin:', Sys.getenv('PATH')))
-#  Sys.setenv(RETICULATE_PYTHON = "/usr/local/anaconda3/bin/python3")
-#}
-###############################################################
 
 #### Read annotation
 
@@ -165,7 +161,7 @@ ggsave(plot = p1+p2,
 cat("*** Reading fragments file \n")
 
 fragments_gr      <- rtracklayer::import(fragments,format = "bed")
-#fragments_gr$name <- paste0(args$sample,"_", fragments_gr$name)
+
 
 cat("*** Exorting merged bw files \n")
 barcode_pass   <- metadata$barcode[metadata$passedMB]
@@ -198,12 +194,10 @@ peaks_file = paste0('results/',args$sample,'/macs/broad/',args$sample,'_peaks.br
 if (!file.exists(peaks_file)) {stop(paste0("Peaks file does not exist:: ", peaks_file))}
 peaks <- rtracklayer::import(peaks_file)
   
-counts.matrix.peaks <- FeatureMatrix(
-  fragments = fragments,
-  features = peaks,
-  cells = metadata$barcode,
-  chunk = 50
-)
+counts.matrix.peaks <- FeatureMatrix(fragments = fragments,
+                                     features = peaks,
+                                     cells = metadata$barcode,
+                                     chunk = 50)
 
 
 counts.matrix.bins <- GenomeBinMatrix(fragments = fragments, 
@@ -235,7 +229,27 @@ seurat_object            <- RenameCells(object = seurat_object,add.cell.id = arg
 seurat_object$antibody   <- config$sample[[args$sample]]$Antibody
 seurat_object$GFP        <- config$sample[[args$sample]]$GFP
 
-########################## CLuster using Seurat
+
+########## Create Gene activity matrix 
+cat("*** Create gene matrix for mm10 \n")
+gene.matrix     <- FeatureMatrix(fragments = fragments,
+                                 features = genebodyandpromoter.coords.flat,
+                                 cells = gsub(paste0(args$sample,"_"),"",colnames(seurat_object)))
+
+genes.key             <- genebodyandpromoter.coords.flat$name
+names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
+rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
+
+gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
+colnames(gene.matrix) <- paste0(args$sample,"_",colnames(gene.matrix))
+
+seurat_object[['GA']] <- CreateAssayObject(counts = gene.matrix)
+
+######### Save the object
+cat("*** Save the object \n")
+saveRDS(object = seurat_object,file = paste0(args$out_prefix,'Seurat_object.Rds'))
+
+########################## Try Lustering using Seurat
 cat("*** Clustering and dimensionality reduction \n")
 
 DefaultAssay(seurat_object) <- paste0('bins_',args$window)
@@ -278,24 +292,8 @@ ggsave(plot= p1 + p2 + p3,
        filename = paste0(args$out_prefix,'Seurat_clustering.png'),
        width=15,height=5)
 })
-########## Create Gene activity matrix 
-cat("*** Create gene matrix for mm10 \n")
-gene.matrix     <- FeatureMatrix(fragments = fragments,
-                                 features = genebodyandpromoter.coords.flat,
-                                 cells = gsub(paste0(args$sample,"_"),"",colnames(seurat_object)))
 
-genes.key             <- genebodyandpromoter.coords.flat$name
-names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
-rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
-
-gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
-colnames(gene.matrix) <- paste0(args$sample,"_",colnames(gene.matrix))
-
-seurat_object[['GA']] <- CreateAssayObject(counts = gene.matrix)
-
-
+######### Save the final object
 cat("*** Save the object \n")
-saveRDS(seurat_object,
-        paste0(args$out_prefix,'Seurat_object.Rds')
-)
+saveRDS(object = seurat_object,file = paste0(args$out_prefix,'Seurat_object.Rds'))
 
