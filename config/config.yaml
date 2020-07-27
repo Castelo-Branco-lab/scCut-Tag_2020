@@ -2,7 +2,7 @@ samples:
   H3K4me3_N1: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_005
     clustering_params: 
-      min_reads_log10: 3.7
+      min_reads_log10: 4.0
       max_reads_log10: 5.5
       min_peaks_ratio: 0.5
       max_peaks_ratio: 0.98
@@ -22,8 +22,8 @@ samples:
   H3K4me3_N3: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01
     clustering_params: 
-      min_reads_log10: 2.5
-      max_reads_log10: 4.2
+      min_reads_log10: 2.3 
+      max_reads_log10: 5
       min_peaks_ratio: 0.5
       max_peaks_ratio: 0.98
     GFP: GFP+
@@ -33,7 +33,7 @@ samples:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB02
     clustering_params: 
       min_reads_log10: 2.5
-      max_reads_log10: 4.2
+      max_reads_log10: 5.0
       min_peaks_ratio: 0.5
       max_peaks_ratio: 0.98
     GFP: GFP-
@@ -44,9 +44,9 @@ samples:
   H3K27me3_N1: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_19_003
     clustering_params: 
-      min_reads_log10: 4
-      max_reads_log10: 5.6
-      min_peaks_ratio: 0.25
+      min_reads_log10: 3.2
+      max_reads_log10: 6.0
+      min_peaks_ratio: 0.2
       max_peaks_ratio: 0.75
     GFP: GFP+
     Age: P25
@@ -54,14 +54,36 @@ samples:
   H3K27me3_N2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_006
     clustering_params: 
-      min_reads_log10: 4
-      max_reads_log10: 5.6
-      min_peaks_ratio: 0.25
+      min_reads_log10: 3.5
+      max_reads_log10: 6.0
+      min_peaks_ratio: 0.2
       max_peaks_ratio: 0.75
     GFP: GFP+
     Age: P25
     Antibody: H3K27me3
 
+  H3K27me3_N3: 
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB03
+    clustering_params: 
+      min_reads_log10: 2.3
+      max_reads_log10: 4.5
+      min_peaks_ratio: 0.05
+      max_peaks_ratio: 0.75
+    GFP: GFP+
+    Age: P15
+    Antibody: H3K27me3
+
+  H3K27me3_N4: 
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB04
+    clustering_params: 
+      min_reads_log10: 2.5
+      max_reads_log10: 5.0
+      min_peaks_ratio: 0.05
+      max_peaks_ratio: 0.75
+    GFP: GFP-
+    Age: P15
+    Antibody: H3K27me3
+
 general:
-  clustering_window: [250,1000,5000,25000,100000]
+  clustering_window: [1000,10000,5000,25000,50000,100000]
   conda_env: CT_snakemake
