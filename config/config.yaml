@@ -61,7 +61,6 @@ samples:
     GFP: GFP+
     Age: P25
     Antibody: H3K27me3
-
   H3K27me3_N3: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB03
     clustering_params: 
@@ -72,7 +71,6 @@ samples:
     GFP: GFP+
     Age: P15
     Antibody: H3K27me3
-
   H3K27me3_N4: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB04
     clustering_params: 
@@ -83,6 +81,27 @@ samples:
     GFP: GFP-
     Age: P15
     Antibody: H3K27me3
+
+  H3K27ac_N1:
+    cellranger_out: /data/proj/GCB_MB/CT/CT_19_001
+    clustering_params:
+      min_reads_log10: 3.5
+      max_reads_log10: 5.5
+      min_peaks_ratio: 0.15
+      max_peaks_ratio: 0.75
+    GFP: GFP+
+    Age: P25
+    Antibody: H3K27ac
+  H3K27ac_N2:
+    cellranger_out: /data/proj/GCB_MB/CT/CT_19_002
+    clustering_params:
+      min_reads_log10: 3.0
+      max_reads_log10: 6.0
+      min_peaks_ratio: 0.25
+      max_peaks_ratio: 0.75
+    GFP: GFP+
+    Age: P25
+    Antibody: H3K27ac
 
 general:
   clustering_window: [1000,10000,5000,25000,50000,100000]

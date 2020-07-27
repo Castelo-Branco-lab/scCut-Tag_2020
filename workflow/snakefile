@@ -127,16 +127,16 @@ rule add_barcode_fragments:
     input:
         fragments = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz'
     output:
-        "results/{sample}/outs/fragments.tsv.gz",
-        "results/{sample}/outs/fragments.tsv.gz.tbi"
+        fragments = "results/{sample}/outs/fragments.tsv.gz",
+        index.    = "results/{sample}/outs/fragments.tsv.gz.tbi"
     conda: '../envs/CT_snakemake.yaml'
     params:
         script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
         sample         = '{sample}'
     shell:
         "set +o pipefail; "
-        "python3 {params.script} {input.fragments} {params.sample} | bgzip > {output}; "
-        "tabix -p bed {output}"
+        "python3 {params.script} {input.fragments} {params.sample} | bgzip > {output.fragments}; "
+        "tabix -p bed {output.fragments}"
 
 rule cell_selection:
   input:
