@@ -1,14 +1,19 @@
 import os
 import sys
 
-shell.executable("/bin/bash")
-shell.prefix("source ~/.bashrc; ")
-
 config_file = 'scCut-Tag_2020/config/config.yaml' 
 configfile: config_file
 
+
+shell.executable("/bin/bash")
+shell.prefix("source ~/.bashrc; conda activate " + config['general']['conda_env'] + " ;echo $PATH;")
+
+
 samples_list    = [x for x in config['samples']]
 antibody_list   = [config['samples'][x]['Antibody'] for x in config['samples'].keys()]
+
+
+
 
 # Create antibody: path to cellranger mapping for expand
 d = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
@@ -29,12 +34,14 @@ rule all:
 
     # Merged files accross replicates
     expand("results/merged/{antibody}/possorted_bam.bam", antibody = list(set(antibody_list))),
+    expand("results/{sample}/outs/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),
 
     # Barcode statistics for cell selection
-    expand("results/{sample}/barcode_statistics/barcode_statistics_{x}.log",sample = samples_list,x=['peaks','all'])
-
+    expand("results/{sample}/barcode_statistics/all_barcodes.txt",sample = samples_list),
+    expand("results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",sample = samples_list),
+    expand("results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",sample = samples_list),
     #Clustering
-    #expand("results/{sample}/cell_selection/Seurat_{binwidth}.Rds",binwidth = config['general']['clustering_window'],sample = samples_list),
+    expand("results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",binwidth = config['general']['clustering_window'],sample = samples_list)
 
 
 
@@ -80,12 +87,9 @@ rule barcode_statistics_peaks:
         peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
         peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     output:
-        log    = "results/{sample}/barcode_statistics/barcode_statistics_peaks.log",
         narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
         broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt"
     params:
-        out_narrow = "barcode_statistics/{sample}/peaks_barcodes_narrow.txt",
-        out_broad  = "barcode_statistics/{sample}/peaks_barcodes_broad.txt",
         scripts    = os.path.dirname(workflow.basedir) + '/scripts',
 
     conda: '../envs/CT_snakemake.yaml'
@@ -102,17 +106,13 @@ rule barcode_statistics_all:
   input:
      bam       = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
   output:
-    log        = "results/{sample}/barcode_statistics/barcode_statistics_all.log",
-    out_narrow = "results/{sample}/barcode_statistics/all_barcodes_narrow.txt",
-    out_broad  = "results/{sample}/barcode_statistics/all_barcodes_broad.txt"
+    all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt"
   params:
-    out_narrow = "barcode_statistics/{sample}/all_barcodes_narrow.txt",
-    out_broad  = "barcode_statistics/{sample}/all_barcodes_broad.txt",
     scripts    = os.path.dirname(workflow.basedir) + '/scripts',
   shell:
     " set +o pipefail; "
-    " samtools view -f2 {input.bam} | "
-    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' |sort | uniq -c > {params.out_broad} && "
+    " samtools view -f2 {input.bam}| "
+    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.all_bcd} && "
     " 2> {output.log}; "
     " echo 'DONE' >> {output.log} "
 
@@ -124,30 +124,68 @@ rule merge_bam:
     conda: '../envs/CT_snakemake.yaml'
     threads: 8
     shell:
-        "samtools merge --threads {threads} {output} {input}"    
+        "samtools merge --threads {threads} {output} {input}" 
+
+rule add_barcode_fragments:
+    input:
+        fragments = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz'
+    output:
+        "results/{sample}/outs/fragments.tsv.gz",
+        #"results/{sample}/outs/fragments.tsv.gz.tbi"
+    conda: '../envs/CT_snakemake.yaml'
+    params:
+        script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
+        sample         = '{sample}'
+    shell:
+        "set +o pipefail; "
+        "python3 {params.script} {input.fragments} {params.sample} | bgzip > {output}; "
+        "tabix -p bed {output}"
+
+ rule merge_fragments_per_antibody:
+   input:
+       lambda wildcards: [x + '/outs/possorted_bam.bam' for x in d[wildcards.antibody] ]
+   output:
+       "results/merged/{antibody}/fragments.tsv.gz"
+   params:
+      script           = os.path.dirname(workflow.basedir) + '/scripts/merge_fragments.sh',
+      fragments_merged = "results/merged/{antibody}/fragments.tsv"
+   shell:
+      "set +o pipefail; "
+      "{script} {input} > {params.fragments_merged}; "
+      "bgzip {params.fragments_merged} > {output}; "
+      "tabix -p bed {output} "
+
+
 
 rule cell_selection:
   input:
-      peaks           = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
-      fragments_file   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
+      all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt",
+      bcd_narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
+      bcd_broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",
+      peaks      = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
+      metadata   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/singlecell.csv',
+      fragments  = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
+      
+      
   output:
-      "results/{sample}/cell_selection/Seurat_{binwidth}.Rds",
+      "results/{sample}/cell_picking/{binwidth}/cells_10x.png",
+      "results/{sample}/cell_picking/{binwidth}/cells_picked.png",
+      "results/{sample}/cell_picking/{binwidth}/cells_picked.bw",
+      "results/{sample}/cell_picking/{binwidth}/cells_not_picked.bw",
+      "results/{sample}/cell_picking/{binwidth}/Seurat_clustering.png",
+      "results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",
+      
   conda: '../envs/CT_snakemake.yaml'
   params:
-      min_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['min_reads_log10']),
-      max_reads      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['max_reads_log10']),
-      min_peaks      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['min_peaks_ratio']),
-      max_peaks      = lambda wildcards:        str(config['samples'][wildcards.sample]['clustering_params']['max_peaks_ratio']),
-      peaks_file     = lambda wildcards, input: "--peaks_file  " + input.peaks if wildcards.binwidth == "peaks" else "",
-      feature        = lambda wildcards:        "peaks" if wildcards.binwidth == "peaks" else "bins --window " + str(wildcards.binwidth),
       script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
       binwidth       = "{binwidth}",
-      out_prefix     = "results/{sample}/cell_selection/",
+      out_prefix     = "results/{sample}/cell_picking/{binwidth}/",
       config_file    = config_file,
-      sample         = "{sample}",
-
+      sample         = "{sample}"
   shell:
-      "Rscript {params.script}  --sample {params.sample} --config {params.config_file} --out_prefix {params.out_prefix} --feature {params.feature}"
+      "echo $PATH; "
+      "which R; "
+      "Rscript {params.script}  --sample {params.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {params.binwidth}"
 
 
 

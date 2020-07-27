@@ -1,14 +1,24 @@
-# Final clustering for H3K4me3 dataset
+# Preprocessing of the H3K4me3 dataset
+
+
+print(.libPaths())
+
+if (!'Signac' %in% rownames(installed.packages())){
+  cat("Installing missing package Signac \n")
+  install.packages('Signac',repos='http://cran.us.r-project.org')
+}
+
+
+cat("*** Loading libraries")
 suppressMessages({
 library(argparse);
 library(Seurat);
 library(Signac);
 library(EnsDb.Mmusculus.v79);
-library(EnsDb.Hsapiens.v86)
 library(viridis);
 library(ggplot2);
 library(dplyr);
-library(gridExtra);
+library(BSgenome.Mmusculus.UCSC.mm10)
 # library(BSgenome.Mmusculus.UCSC.mm10);
   }
 )
@@ -19,20 +29,8 @@ set.seed(1234)
 
 parser <- ArgumentParser()
 
-parser$add_argument("-l", "--reads_min", type="double", default=4, 
-                    help="minimum number of reads in cell [log10 scale]")
-
-parser$add_argument("-m", "--reads_max", type="double", default=5.5, 
-                    help="maximum number of reads in cell [log10 scale]")
-
-parser$add_argument("-q", "--peaks_min", type="double", default=0.25, 
-                    help="maximum number of reads in cell")
-
-parser$add_argument("-r", "--peaks_max", type="double", default=0.7, 
-                    help="maximum number of reads in cell")
-
-parser$add_argument("-d", "--ndim", type="integer", default=30, 
-                    help="maximum number of reads in cell")
+parser$add_argument("-s", "--sample", type="character", default='foo', 
+                    help="sample name [as in config file key]")
 
 parser$add_argument("-c", "--config", type="character", default='config/config.yaml', 
                     help="maximum number of reads in cell")
@@ -40,23 +38,8 @@ parser$add_argument("-c", "--config", type="character", default='config/config.y
 parser$add_argument("-o", "--out_prefix", type="character", default="100000_UMI", 
                     help="folder for the output in clustering_snakemake folder")
 
-parser$add_argument("-t", "--feature", type="character", default="bins", 
-                    help="type of features choose one of: [bins,peaks]")
-
-parser$add_argument("-g", "--genome", type="character", default="mm10", 
-                    help="genome either mm10 or GRCh38")
-
-parser$add_argument("-p", "--peaks_file", type="character", default="macs2_peaks.combined/broad/combined_peaks.broadPeak", 
-                    help="path to the peaks file [.bed]")
-
-parser$add_argument("-f", "--fragments_file", type="character", default="data/combined/outs/fragments.tsv.gz", 
-                    help="path to the fragments file")
-
 parser$add_argument("-w", "--window", type="integer", default=10000, 
                     help="width of the genome window (if -t bins)")
-
-parser$add_argument("-1", "--cells_selection", type="logical", default=FALSE, 
-                    help="Quit after plotting the cell depth-percentage in peaks plot to adjust the parameters")
 
 args <- parser$parse_args()
 print(args)
@@ -70,14 +53,13 @@ cutoff_peak_percentage_low  = config$samples[[args$sample]]$clustering_params$mi
 cutoff_peak_percentage_high = config$samples[[args$sample]]$clustering_params$max_peaks_ratio
 
 ndim = 30
-feature = args$feature
 window  = args$window
 
-fragments <- args$fragments_file
+fragments <- paste0(config$samples[[args$sample]]$cellranger_out,'/outs/fragments.tsv.gz')
 assay = "peaksMB"
 
 
-
+if (!file.exists(fragments)) {stop(paste0("Fragments file does not exist: ",fragments))}
 ###############################################################
 
 #if(grepl("monod.*.mbb.ki.se", Sys.info()["nodename"])) {
@@ -93,8 +75,8 @@ assay = "peaksMB"
 
 #### Read annotation
 
-if (args$genome == 'mm10')  {ensdb = EnsDb.Mmusculus.v79}
-if (args$genome == 'GRCh38'){ensdb = EnsDb.Hsapiens.v86}
+cat("*** Loading mm10 annotation \n")
+ensdb = EnsDb.Mmusculus.v79
 
 gene.coords <- ensembldb::genes(ensdb, filter = ~ gene_biotype == "protein_coding")
 lncRNA.coords <- ensembldb::genes(ensdb, filter = ~ gene_biotype == "lincRNA")
@@ -112,264 +94,208 @@ genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.c
 
 
 
-#### Read config file
-if (!file.exists("config.yaml")) {
-  stop("You are in the wrong the directory !")
-}
-
-config <- yaml::read_yaml("config.yaml")
-samples <- names(config$samples)
-files   <- unlist(config$samples)
-antibody <- strsplit(samples,"_N")[[1]][1]
-
-if(!grepl("monod.*.mbb.ki.se",Sys.info()['nodename'])){
-  files <- gsub("/data/proj/GCB_MB","~/mount",files)
-}
-
 ########## Filter the barcodes
+cat("*** Reading barcode statistics files \n")
 
-all_barcodes  <- paste0("barcode_statistics/",samples,"/all_barcodes_broad.txt")
-peak_barcodes <- paste0("barcode_statistics/",samples,"/peaks_barcodes_broad.txt")
-md_files      <- paste0(files,"/outs/singlecell.csv")
+all_barcodes_file  <- paste0('results/',args$sample,'/barcode_statistics/all_barcodes.txt')
+peak_barcodes_file <- paste0('results/',args$sample,'/barcode_statistics/peaks_barcodes_broad.txt')
+metadata_file      <- paste0(config$samples[[args$sample]]$cellranger_out,'/outs/singlecell.csv')
+
+metadata = read.csv(metadata_file, header = 1)
+metadata = metadata[2:nrow(metadata),]
+metadata$logUMI = log10(metadata$passed_filters + 1)
+metadata$promoter_ratio = (metadata$promoter_region_fragments+1) / (metadata$passed_filters + 1)
+metadata$peak_region_ratio = (metadata$peak_region_fragments+1) / (metadata$passed_filters + 1)
+
+all_barcodes <- read.table(file=all_barcodes_file)
+peak_barcodes <- read.table(file=peak_barcodes_file)
+bcd <- merge(all_barcodes,peak_barcodes,by="V2")  
+colnames(bcd) <- c("barcode","all_unique_MB","peak_MB")
+bcd$peak_ratio_MB <- bcd$peak_MB/bcd$all_unique_MB
+bcd$sample <- args$sample
+
+# Merge 10x metadata with barcode statistics
+metadata <- merge(metadata,bcd,by='barcode')
 
 
-barcode.ls.10X = lapply(seq(all_barcodes), function(i){
-  barcodes = read.csv(
-    md_files[i], 
-    head=TRUE
-  )
-  barcodes = barcodes[2:nrow(barcodes),]
-  #barcodes = barcodes[barcodes$cell_id != "None",]          # Filter away cell barcodes that were not called by cellranger
-  barcodes$logUMI = log10(barcodes$passed_filters + 1)
-  barcodes$promoter_ratio = (barcodes$promoter_region_fragments+1) / (barcodes$passed_filters + 1)
-  barcodes$peak_region_ratio = (barcodes$peak_region_fragments+1) / (barcodes$passed_filters + 1)
-  barcodes
-})
+metadata$is__cell_barcode <- as.factor(metadata$is__cell_barcode)
 
-barcode.ls.10X <- lapply(1:length(barcode.ls.10X),function(x) {
-  all_barcodes <- read.table(file=all_barcodes[x])
-  peak_barcodes <- read.table(file=peak_barcodes[x])
-  bcd <- merge(all_barcodes,peak_barcodes,by="V2")  
-  colnames(bcd) <- c("barcode","all_unique_MB","peak_MB")
-  bcd$peak_ratio_MB <- bcd$peak_MB/bcd$all_unique_MB
-  bcd$sample <- samples[x]
-  return(merge(barcode.ls.10X[[x]],bcd,by.x="barcode",by.y="barcode"))
-})
-
-barcode.ls.10X <- lapply(barcode.ls.10X,function(x){
-  x$is__cell_barcode <- as.factor(x$is__cell_barcode)
-  x
-})
 ################ MB filtering
+cat("*** Filtering cells \n")
+metadata[,"passedMB"] <- FALSE
+metadata[metadata$all_unique_MB > 10^cutoff_reads_min &
+         metadata$all_unique_MB < 10^cutoff_reads_max &
+         metadata$peak_ratio_MB > cutoff_peak_percentage_low &
+         metadata$peak_ratio_MB < cutoff_peak_percentage_high,"passedMB"] <- TRUE
 
-barcode.ls.10X <- lapply(barcode.ls.10X,function(x){
-  x[,"passedMB"] <- FALSE
-  x[x$all_unique_MB > cutoff_reads_min &
-      x$all_unique_MB < cutoff_reads_max &
-      x$peak_ratio_MB > cutoff_peak_percentage_low &
-      x$peak_ratio_MB < cutoff_peak_percentage_high,"passedMB"] <- TRUE
-  x
-})
 
 ################ Cell picking scatterplot nreads ~ percent in peaks
 
-if(!file.exists("clustering_snakemake/01.clustering/figures/scatterplot_cells_picking_10x.pdf")){
-  p1 <- lapply(seq(barcode.ls.10X),function(x){
-    ggplot(data=barcode.ls.10X[[x]]) + 
-      geom_point(aes(x=log10(all_unique_MB),y=peak_ratio_MB,col=is__cell_barcode),size=0.1) + 
-      scale_color_manual(values=c("black","gold"),labels=c(paste("TRUE",sum(barcode.ls.10X[[x]]$passedMB)),
-                                                             "FALSE")) +
-      theme(legend.position="bottom")    
-  })
-  
-  p2 <- lapply(seq(barcode.ls.10X),function(x){
-    ggplot(data=barcode.ls.10X[[x]]) + 
-      geom_point(aes(x=log10(passed_filters),y=peak_region_fragments/passed_filters,col=is__cell_barcode),size=0.1) +
-      scale_color_manual(values=c("black","gold"))
-  })
-  
-  
-  plots <- do.call('c',list(p1,p2))
-  g <- do.call("grid.arrange", c(plots,ncol=floor(sqrt(length(plots)))))
-  ggsave(filename = "clustering_snakemake/01.clustering/figures/scatterplot_cells_picking_10x.pdf",
-         plot = g,
-         width=10,heigh=10)
+p1 <- ggplot(data = metadata,aes(x=log10(all_unique_MB),y=peak_ratio_MB,col=is__cell_barcode)) + 
+  geom_point(size=0.1) + 
+  scale_color_manual(values=c("black","gold"),labels=c(paste("TRUE",sum(as.numeric(as.character(metadata$is__cell_barcode)))),"FALSE")) +
+  theme(legend.position="bottom",text=element_text(size=26)) 
 
-}
-#
-if(!file.exists("clustering_snakemake/01.clustering/figures/scatterplot_cells_picking_custom.pdf")){
-  p1 <- lapply(seq(barcode.ls.10X),function(x){
-    ggplot(data=barcode.ls.10X[[x]]) + 
+p2 <- ggplot(data = metadata,aes(x=log10(passed_filters),y=peak_region_fragments/passed_filters,col=is__cell_barcode)) + 
+  geom_point(size=0.1) +
+  scale_color_manual(values=c("black","gold"),labels=c(paste("TRUE",sum(as.numeric(as.character(metadata$is__cell_barcode)))),NA)) + 
+  theme(legend.position="bottom",text=element_text(size=26))
+
+ggsave(plot = p1+p2,
+       filename=paste0(args$out_prefix,'cells_10x.png'),width = 20,height = 10,units = 'in')
+
+
+p1 <- ggplot(data = metadata) + 
       geom_point(aes(x=log10(all_unique_MB),y=peak_ratio_MB,col=passedMB),size=0.1) + 
       geom_hline(yintercept = c(cutoff_peak_percentage_high,cutoff_peak_percentage_low)) + 
-      geom_vline(xintercept = log10(c(cutoff_reads_min,cutoff_reads_max))) + 
-      scale_color_manual(values=c("black","gold"),labels=c(paste("TRUE",sum(barcode.ls.10X[[x]]$passedMB)),
-                                                           "FALSE")) +
-      theme(legend.position="bottom")    
-  })
+      geom_vline(xintercept = c(cutoff_reads_min,cutoff_reads_max)) + 
+      scale_color_manual(values=c("black","gold"),labels=c(paste("TRUE",sum(metadata$passedMB)),"FALSE")) +
+      theme(legend.position="bottom",text=element_text(size=26))
   
-  p2 <- lapply(seq(barcode.ls.10X),function(x){
-    ggplot(data=barcode.ls.10X[[x]]) + 
+p2 <- ggplot(data = metadata) + 
       geom_point(aes(x=log10(passed_filters),y=peak_region_fragments/passed_filters,col=passedMB),size=0.1) +
-      scale_color_manual(values=c("black","gold"))
-  })
-  
-  
-  plots <- do.call('c',list(p1,p2))
-  g <- do.call("grid.arrange", c(plots,ncol=floor(sqrt(length(plots)))))
-  ggsave(filename = "clustering_snakemake/01.clustering/figures/scatterplot_cells_picking_custom.pdf",
-         plot = g,
-         width=10,heigh=10)
-  rm(list = c("g","p1","p2","plots"))
-}
+      scale_color_manual(values=c("black","gold")) + 
+      theme(legend.position="bottom",text=element_text(size=26))
+
+ggsave(plot = p1+p2,
+       filename=paste0(args$out_prefix,'cells_picked.png'),width = 20,height = 10,units = 'in')
+
 
 ################# Export bw selected / unselected
-fragments_gr <- rtracklayer::import(fragments,format = "bed")
+cat("*** Reading fragments file \n")
 
-lapply(barcode.ls.10X,function(x){
-  x.barcode_pass <- paste0(x$sample,"_",x$barcode)[x$passedMB]
-  x.barcode_nopass <- paste0(x$sample,"_",x$barcode)[!x$passedMB]
-  
-  print("Retrieving reads")
-  fragments.pass <- fragments_gr[fragments_gr$name %in% x.barcode_pass]
-  fragments.nopass <- fragments_gr[fragments_gr$name %in% x.barcode_nopass]
-  
-  print(c(length(fragments.pass),length(fragments.nopass)))
-  
-  print("Calculating coverage")
-  coverage.pass <- GenomicRanges::coverage(fragments.pass)
-  coverage.nopass <- GenomicRanges::coverage(fragments.nopass)
-  
-  print("Normalizing")
-  coverage.pass <- coverage.pass/length(fragments.pass)
-  coverage.nopass <- coverage.nopass/length(fragments.nopass)
-  
-  print("Exporting")
-  #rtracklayer::export(object=coverage.pass,con = paste0("~/snakemake/H3K4me3/01.clustering/bigwig/",x$sample[1],"_pass.bw"))
-  #rtracklayer::export(object=coverage.nopass,con = paste0("~/snakemake/H3K4me3/01.clustering/bigwig/",x$sample[1],"_nopass.bw"))
-  
-  
-  rtracklayer::export(object=coverage.pass,con = paste0("bigwig/",x$sample[1],"filter_pass.bw"))
-  rtracklayer::export(object=coverage.nopass,con = paste0("bigwig/",x$sample[1],"filter_nopass.bw"))
-  
-  
-})
+fragments_gr      <- rtracklayer::import(fragments,format = "bed")
+#fragments_gr$name <- paste0(args$sample,"_", fragments_gr$name)
 
-
-############ Stop here if cell_selection is selected
-if(args$cells_selection){
-  quit("no",0)
-}
+cat("*** Exorting merged bw files \n")
+barcode_pass   <- metadata$barcode[metadata$passedMB]
+barcode_nopass <- metadata$barcode[!metadata$passedMB]
+  
+fragments.pass   <- fragments_gr[fragments_gr$name %in% barcode_pass]
+fragments.nopass <- fragments_gr[fragments_gr$name %in% barcode_nopass]
+  
+cat("*** Calculating coverage \n")
+coverage.pass   <- GenomicRanges::coverage(fragments.pass)
+coverage.nopass <- GenomicRanges::coverage(fragments.nopass)
+  
+cat("*** Normalizing \n")
+coverage.pass <- coverage.pass/length(fragments.pass)
+coverage.nopass <- coverage.nopass/length(fragments.nopass)
+  
+cat("*** Exporting \n")
+rtracklayer::export(object=coverage.pass,  con = paste0(args$out_prefix,'cells_picked.bw'))
+rtracklayer::export(object=coverage.nopass,con = paste0(args$out_prefix,'cells_not_picked.bw'))
 
 ############################ Filter the dataset
 
-barcode.ls.10X.filter <- lapply(barcode.ls.10X,function(x){
-  x <- x[x$all_unique_MB > cutoff_reads_min &
-      x$all_unique_MB < cutoff_reads_max &
-      x$peak_ratio_MB > cutoff_peak_percentage_low &
-      x$peak_ratio_MB < cutoff_peak_percentage_high,]
-  rownames(x) <- x$barcode
-  x
-})
-
-############################ Merge barcode metadata
-barcode.10X.filter <- do.call('rbind',barcode.ls.10X.filter)
-rownames(barcode.10X.filter) <- paste0(barcode.10X.filter$sample,"_",barcode.10X.filter$barcode)
-
+metadata <- metadata[metadata$passedMB,]
+rownames(metadata) <- metadata$barcode
 
 ############################ Create peak counts matrix
+cat("*** Creating bins/peaks matrices \n")
 
-if (!file.exists(fragments)) {stop(paste0("Fragments file does not exist: ",fragments))}
-
-if(args$feature == "peaks"){
-  if (!file.exists(args$peaks_file)) {stop(paste0("Fragments file does not exist:: ",args$peaks_file))}
-  peaks <- rtracklayer::import(args$peaks_file)
+peaks_file = paste0('results/',args$sample,'/macs/broad/',args$sample,'_peaks.broadPeak')
+if (!file.exists(peaks_file)) {stop(paste0("Peaks file does not exist:: ", peaks_file))}
+peaks <- rtracklayer::import(peaks_file)
   
-  counts.matrix <- FeatureMatrix(
-    fragments = fragments,
-    features = peaks,
-    cells = rownames(barcode.10X.filter),
-    chunk = 50
-  )
-}
+counts.matrix.peaks <- FeatureMatrix(
+  fragments = fragments,
+  features = peaks,
+  cells = metadata$barcode,
+  chunk = 50
+)
 
 
-
-if(args$feature == "bins"){
-    counts.matrix <- GenomeBinMatrix(fragments = fragments, 
+counts.matrix.bins <- GenomeBinMatrix(fragments = fragments, 
                                       genome = seqlengths(BSgenome.Mmusculus.UCSC.mm10),
-                                      binsize = window)
-  }
-
-
-
-counts.matrix <- counts.matrix[,colnames(counts.matrix) %in% rownames(barcode.10X.filter)]
-
+                                      binsize = window,
+                                      cells = metadata$barcode)
+  
 ########################## Create Seurat object 
 min_features = 1
 min_cells    = 1
 
-brain <- CreateSeuratObject(counts = counts.matrix,
-                     project = antibody,
-                     assay = assay,
-                     meta.data = barcode.10X.filter,
+seurat_object <- CreateSeuratObject(counts = counts.matrix.bins,
+                     project = args$sample,
+                     assay = paste0('bins_',args$window),
+                     meta.data = metadata,
                      min.features = min_features,
                      min.cells = min_cells)
 
-brain <- brain[,Matrix::colSums(brain[[assay]]@counts) >=min_cells]
-brain <- brain[Matrix::rowSums(brain[[assay]]@counts,) >=min_features]
 
+seurat_object[['peaks']] <- CreateAssayObject(counts = counts.matrix.peaks[,colnames(counts.matrix.peaks) %in% colnames(seurat_object)])
+
+# Filter blacklist cells
+seurat_object$blacklist_ratio <- seurat_object$blacklist_region_fragments / seurat_object$all_unique_MB
+seurat_object                 <- seurat_object[,seurat_object$blacklist_region_fragments > 5]
+
+# Add sample id to cell names
+seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
+
+seurat_object$antibody   <- config$sample[[args$sample]]$Antibody
+seurat_object$GFP        <- config$sample[[args$sample]]$GFP
 
 ########################## CLuster using Seurat
+cat("*** Clustering and dimensionality reduction \n")
 
+DefaultAssay(seurat_object) <- paste0('bins_',args$window)
 
-brain <- RunTFIDF(brain)
-brain <- FindTopFeatures(brain,min.cutoff = 'q5')
-brain <- RunSVD(
-  brain,
+# The dimensionality reduction might fail, especially for low complexity datasets, so put the code into try to still save the objects
+try({
+seurat_object <- RunTFIDF(seurat_object)
+seurat_object <- FindTopFeatures(seurat_object,min.cutoff = 'q20')
+seurat_object <- RunSVD(
+  seurat_object,
   reduction.key = 'LSI_',
-  reduction.name = 'lsi', 
-  n = 50
-)
+  reduction.name = 'lsi'
+  )
 
 
-brain <- RunUMAP(brain, dims = 2:ndim, reduction = 'lsi')
+seurat_object <- RunUMAP(seurat_object, dims = 2:ndim, reduction = 'lsi')
 
-brain <- FindNeighbors(
-  object = brain,
+seurat_object <- FindNeighbors(
+  object = seurat_object,
   reduction = 'lsi',
   dims = 2:ndim
 )
 
 
-brain <- FindClusters(
-  object = brain,
+seurat_object <- FindClusters(
+  object = seurat_object,
   algorithm = "leiden",
   resolution = 0.3,
   verbose = TRUE
 )
 
-p1 <- DimPlot(brain,group.by = 'sample')
-p2 <- DimPlot(brain,group.by = 'ident')
 
-ggsave(plot=p1+p2,
-       filename = paste0(args$out_prefix,"Seurat_ndim_",ndim,"_",args$window,".pdf"),
-       width=12,height=6)
+p1 <- DimPlot(seurat_object,group.by = 'ident')
+p2 <- FeaturePlot(seurat_object,'blacklist_region_fragments')
+p3 <- FeaturePlot(seurat_object,'logUMI')
 
+
+
+ggsave(plot= p1 + p2 + p3,
+       filename = paste0(args$out_prefix,'Seurat_clustering.png'),
+       width=15,height=5)
+})
 ########## Create Gene activity matrix 
-
+cat("*** Create gene matrix for mm10 \n")
 gene.matrix     <- FeatureMatrix(fragments = fragments,
-                                 features = genebodyandpromoter.coords.flat,cells = colnames(brain))
+                                 features = genebodyandpromoter.coords.flat,
+                                 cells = gsub(paste0(args$sample,"_"),"",colnames(seurat_object)))
 
 genes.key             <- genebodyandpromoter.coords.flat$name
 names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
 rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
 
-gene.matrix   <- gene.matrix[rownames(gene.matrix) != "",]
-brain[['GA']] <- CreateAssayObject(counts = gene.matrix)
+gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
+colnames(gene.matrix) <- paste0(args$sample,"_",colnames(gene.matrix))
+
+seurat_object[['GA']] <- CreateAssayObject(counts = gene.matrix)
 
 
-saveRDS(brain,
-        paste0(args$out_prefix,"Seurat_",args$window,".Rds")
+cat("*** Save the object \n")
+saveRDS(seurat_object,
+        paste0(args$out_prefix,'Seurat_object.Rds')
 )
 
