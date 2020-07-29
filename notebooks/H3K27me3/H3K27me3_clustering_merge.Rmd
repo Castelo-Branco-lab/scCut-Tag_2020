@@ -4,7 +4,9 @@ output:
   html_document:
     df_print: paged
 params:
-  config: ''
+  config: '../../config/config.yaml'
+  out_prefix: "~/mount/CT/git_test/results/" #'results/'
+  antibody: 'H3K27me3'
 ---
 
 ```{r libraries}
@@ -14,26 +16,21 @@ library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
 library(Signac,quietly = TRUE,warn.conflicts = FALSE)
 library(EnsDb.Mmusculus.v79,quietly = TRUE,warn.conflicts = FALSE)
 library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
-
-
-
+library(rtracklayer,quietly = TRUE,warn.conflicts = FALSE)
+library(yaml,quietly = TRUE,warn.conflicts = FALSE)
+library(pheatmap,quietly = TRUE,warn.conflicts = FALSE)
 set.seed(100)
 
-
+window   = 5000
+assay    = paste0('bins_',window)
+antibody = params$antibody
 ```
 
 
-```{r set_root_dir}
-
-setwd('../../')
-knitr::opts_knit$set(root.dir = getwd())
-
-```
 # Read config
 
 ```{r read_config}
 config <- yaml::read_yaml(params$config)
-print(config)
 ```
 
 # load annotations
@@ -55,55 +52,25 @@ genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.c
 ```
 
 ```{r load_and_merge}
-assay = "peaksMB"
-brain.ls <- lapply(names(config$input$H3K27me3),function(x){
-  
-  if(any(!c("seurat_object","fragments","peaks" ) %in% names(config$input$H3K27me3[[x]]))){
-    stop("Need to specify following in the config yaml file [see example]: seurat_object, fragments, peaks")
-  }
-  
-  if(any(!file.exists(unlist(config$input$H3K27me3[[x]])))){
-    stop("Need to specify following in the config yaml file [see example]: seurat_object, fragments, peaks")
-  }
-  
+samples <- names(which(unlist(lapply(config$samples,function(x){x$Antibody == params$antibody}))))
+
+
+
+brain.ls <- lapply(samples,function(x){
   # Read the seurat object
-  brain               <- readRDS(config$input$H3K27me3[[x]]$seurat_object)
-  DefaultAssay(brain) <- assay
-  
-  brain$age <- unlist(strsplit(names(config$input$H3K27me3[x]),"_"))[1]
-  brain$GFP <- unlist(strsplit(names(config$input$H3K27me3[x]),"_"))[2]
-  
+  brain                     <- readRDS(paste0(params$out_prefix,x,'/cell_picking/',window,'/Seurat_object.Rds'))
+  DefaultAssay(brain)       <- assay
   brain
 })
 
 brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 ```
 
-```{r filter_QC}
- # Filter blacklisted regions / cells
-blacklist.overlaps <- subsetByOverlaps(x = StringToGRanges(rownames(brain.merged)),ranges =   blacklist_mm10,type = 'any')
-blacklist.bins     <- which(rownames(brain.merged) %in% GRangesToString(blacklist.overlaps))
-blacklist.cells    <- colnames(brain.merged[,brain.merged$blacklist_region_fragments > 5])
-blacklist.cells    <- which(colnames(brain.merged) %in% blacklist.cells)
-
-mat.bins <- brain.merged[['peaksMB']]@counts
-mat.bins <- mat.bins[-blacklist.bins,-blacklist.cells]
-
-mat.genes <- brain.merged[['GA']]@counts
-mat.genes <- mat.genes[,colnames(mat.bins)]
-
-meta.data <- brain.merged@meta.data
-meta.data <- meta.data[colnames(mat.bins),]
-
-brain.merged <- CreateSeuratObject(counts = mat.bins,project = 'scCT',assay = 'bins_5kb',meta.data = meta.data)
-brain.merged[['GA']] <- CreateAssayObject(counts = mat.genes)
-
-brain.merged  <- brain.merged[,brain.merged$logUMI > 2]
-# brain.merged  <- brain.merged[,brain.merged$promoter_ratio < 0.5] # Filter away ATAC-seq like cells
-
-DefaultAssay(brain.merged) <- 'bins_5kb'
-
+```{r filter_UMI_promoters}
+brain.merged <- brain.merged[,brain.merged$promoter_ratio < 0.6]
+brain.merged <- brain.merged[,brain.merged$logUMI >1.8]
 ```
+
 
 ```{r cluster_and_dimreduce}
 # Re-do the dimreduction
@@ -112,7 +79,7 @@ brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q0')
   
 brain.merged <- RunSVD(
   object = brain.merged,
-  assay = 'bins_5kb',
+  assay = assay,
   reduction.key = 'LSI_',
   reduction.name = 'lsi',
   n = 50
@@ -137,27 +104,27 @@ brain.merged <- FindClusters(
 )
 
 DimPlot(brain.merged,label=TRUE)
-
 ```
 
 
-```{r plots, fig.width=10,fig.height=10}
+```{r plots, fig.width=8,fig.height=4}
 
-p1 <- DimPlot(brain.merged,group.by='sample',label=TRUE) + NoLegend()
-p2 <- DimPlot(brain.merged,label=TRUE)+ NoLegend()
+p1 <- DimPlot(brain.merged,label=TRUE)  + NoLegend()
+p2 <- DimPlot(brain.merged,group.by='sample',label=TRUE) + theme(legend.position = 'bottom')
 
-p6 <- DimPlot(brain.merged,label=TRUE,group.by = 'age')+ NoLegend()
-p7 <- DimPlot(brain.merged,label=TRUE,group.by = 'GFP')+ NoLegend() + scale_color_manual(values = RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)])
+p3 <- DimPlot(brain.merged,group.by = 'Age')+ NoLegend() + theme(legend.position = 'bottom')
+p4 <- DimPlot(brain.merged,group.by = 'GFP')+ NoLegend() + theme(legend.position = 'bottom') +
+  scale_color_manual(values = RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)])
 
-p.ls <- lapply(names(table(brain.merged$sample)),function(x){
-  DimPlot(brain.merged[,brain.merged$sample == x],label=TRUE)+ NoLegend() + ggtitle(x)
+p.ls <- lapply(unique(brain.merged$sample),function(x){
+  to_plot <- brain.merged[,brain.merged$sample == x]
+  DimPlot(to_plot,label=TRUE,pt.size=0.3)+ NoLegend() + ggtitle(paste(x,unique(to_plot$Age), unique(to_plot$GFP))) + theme(plot.title = element_text(size=12)) + coord_cartesian(xlim=c(-10,15),ylim=c(-10,12))
 })
 
 
 p1 + p2
-p6 + p7
+p3 + p4
 do.call(grid.arrange,p.ls)
-
 FeaturePlot(brain.merged,'logUMI',max.cutoff = 3) + scale_color_viridis_c()
 ```
 
@@ -167,8 +134,8 @@ FeaturePlot(brain.merged,'logUMI',max.cutoff = 3) + scale_color_viridis_c()
 
 
 ```{r load_RNA_markers}
-markers.Sox10 <- read.csv2(file='results/Sox10_RNA/clustering/GFP/markers.csv',row.names = 1)
-markers <- read.csv2(file='results/Sten_RNA/clustering/sten_RNA_markers_temp.csv',row.names = 1)
+markers.Sox10 <- read.csv2(file=paste0(params$out_prefix,'Sox10_RNA/clustering/GFP/markers.csv'),row.names = 1)
+markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
 ```
 
 
@@ -195,38 +162,23 @@ colnames(markers.agg.df) <- paste0("marker_",gsub(" ",".",colnames(markers.agg.d
 
 brain.merged <- AddMetaData(brain.merged,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
 
-# Plotting
-
-p1 <- DimPlot(brain.merged,group.by='sample',label=TRUE) + NoLegend()
-p2 <- DimPlot(brain.merged,label=TRUE)+ NoLegend()
-
-p3 <- DimPlot(brain.merged[,brain.merged$sample == 'H3K27me3_P15_GFP+_N1'],label=TRUE)+ NoLegend()
-p4 <-  DimPlot(brain.merged[,brain.merged$sample != 'H3K27me3_P15_GFP+_N1'],label=TRUE)+ NoLegend()
-
-p1 + p2
-p3 + p4
-p2 + coord_cartesian(xlim=c(-15,15),ylim=c(-10,10))
-
-
 lapply(as.character(colnames(markers.agg.df)),function(x){
-  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()+ coord_cartesian(xlim=c(-15,15),ylim=c(-10,10))
+  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()+ coord_cartesian(xlim=c(-12,12),ylim=c(-12,12))
   #FeaturePlot(brain,x,max.cutoff = 0.08,min.cutoff = 0.02) + scale_color_viridis_c(limits=c(0.02,0.08)) 
   })
 
-
 ```
 
-############################################################# 
-
-
+```{r}
+DimPlot(brain.merged,label=TRUE)
+```
 
 
 
 ```{r Rename_the_clusters,fig.width=10,fig.height=10}
-# Remove small clusters
-small.clusters <- table(brain.merged@active.ident)
-small.clusters <- names(small.clusters)[10:length(small.clusters)]
-brain.merged <- brain.merged[,!brain.merged@active.ident %in% small.clusters]
+# Remove small and weird clusters
+
+brain.merged <- brain.merged[,!brain.merged@active.ident %in% c(9,10)]
 
 # Rename the clusters
 brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
@@ -235,13 +187,13 @@ brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
                                            '3' = 'Exc_neurons',
                                            '4' = 'VLMCs',
                                            '5' = 'OPC',
-                                           '6' = 'Unknown_ATAC',
-                                           '7' = 'Inh_neurons',
-                                           '8' = 'microglia')
+                                           '6' = 'mOL',
+                                           '7' = 'micoglia',
+                                           '8' = 'Inh_neurons')
 
 brain.merged$cell_type <- brain.merged@active.ident
 
-p1 <- DimPlot(object = brain.merged, group.by='age',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
+p1 <- DimPlot(object = brain.merged, group.by='Age',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
 p2 <- DimPlot(object = brain.merged, label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
 p3 <- DimPlot(object = brain.merged, group.by='GFP',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend() + scale_color_manual(values = RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)])
 
@@ -255,43 +207,38 @@ p3
 
 ```{r find_markers}
 brain.merged <- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
-markers <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot = 'data')
+markers <- FindAllMarkers(brain.merged,min.pct = 0.02,logfc.threshold = 0.5,slot = 'data')
 
 markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers)
 
-markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.top      <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
-saveRDS(brain.merged,"results/H3K27me3/clustering/01.clustering.Rds")
-write.csv2(x = markers, file = "results/H3K27me3/clustering/markers.csv")
-write.csv2(x = markers.top, file = "results/H3K27me3/clustering/markers_top.csv")
+saveRDS(object = brain.merged,      file = paste0(params$out_prefix,antibody,"/clustering/01.clustering.Rds"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,antibody,"/clustering/markers.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,antibody,"/clustering/markers_top.csv"))
+write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,antibody,"/clustering/markers_negative.csv"))
 
 ```
 
 ```{r export_bw}
+samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
+samples <- samples[samples == antibody]
 
-fragments1 <- config$input$H3K27me3$`P15_GFP+`$fragments
-fragments1 <- rtracklayer::import(fragments1,format = "bed")
+fragments.ls <- lapply(names(samples),function(x){
+  fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
+  fragments <- rtracklayer::import(fragments,format = 'bed')
+  fragments
+})
 
-fragments2 <- config$input$H3K27me3$`P15_GFP+`$fragments
-fragments2 <- rtracklayer::import(fragments2,format = "bed")
-
-fragments3 <- config$input$H3K27me3$`P25_GFP+`$fragments
-fragments3 <- rtracklayer::import(fragments3,format = "bed")
-
-fragments  <- c(fragments1,fragments2,fragments3)
-
-
+fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
+fragments <- sort(fragments)
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
 
 exportBW <- function(object,cluster,fragments){
-  
-  if(class(object)== "cell_data_set"){
-    cells <- rownames(colData(cds)[colData(cds)$clusters == cluster,])
-  }
-  
   if(class(object) == "Seurat"){
     cells <- rownames(object@meta.data[object@active.ident == cluster,])
   }
@@ -316,26 +263,27 @@ exportBW <- function(object,cluster,fragments){
   # Option B - normalize by mean signal (~ enrichment of mean signal)
   # coverage.x <- coverage.x / mean(unlist(coverage.x))
   
-  rtracklayer::export.bw(object = coverage.x,paste0("results/H3K27me3/clustering/bigwig/cluster_",cluster,".bw"))
+  rtracklayer::export.bw(object = coverage.x,paste0(params$out_prefix,params$antibody,"/clustering/bigwig/cluster_",cluster,".bw"))
 }
 
 lapply(levels(brain.merged@active.ident),function(x){
   exportBW(brain.merged,x,fragments)
 })
 
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/"))
 fragments.x <- fragments[fragments$name %in% colnames(brain.merged)]
 coverage.x  <- coverage(fragments.x) / length(fragments.x)
-rtracklayer::export.bw(object = coverage.x, con ="results/H3K27me3/clustering/bigwig/clusters_all/clusters_all.bw")
+rtracklayer::export.bw(object = coverage.x, con = paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/clusters_all.bw"))
 
 ```
 
 # Export marker bed file 
 
-```{r do_metagene}
+```{r export_bed}
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(500, wt=avg_logFC)
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC)
 
 # Reorder markers
 top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])
@@ -344,36 +292,16 @@ top.markers         <- as.data.frame(top.markers)
 top.markers         <- top.markers[order(top.markers$cluster),]
 
 
-dir.create("results/H3K27me3/clustering/markers_bed/",recursive = TRUE)
-
 lapply(levels(top.markers$cluster),function(x){
   top.markers.x <- top.markers[top.markers$cluster == x,]
   top.markers.x <- sort(StringToGRanges(top.markers.x$gene))
-  rtracklayer::export.bed(object = top.markers.x,con = paste0("results/H3K27me3/clustering/markers_bed/markers_cluster_",x,".bed"))
+  rtracklayer::export.bed(object = top.markers.x,con = paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/markers_cluster_",x,".bed"))
 })
-
-bw.files <- list.files(path = "results/H3K27me3/clustering/bigwig/",pattern = "*.bw",full.names = TRUE)
-
-system(paste0("/usr/local/anaconda3/bin/computeMatrix reference-point   -S results/H3K27me3/clustering/bigwig/*.bw",  
-                                                                      " -R results/H3K27me3/clustering/markers_bed/*.bed", 
-                                                                      " -o results/H3K27me3/clustering/markers_bed/metagene_matrix.txt.gz",
-                                                                      " -a 10000 ", 
-                                                                      " -b 10000 ",
-                                                                      " -p 4",sep= ' '))
-
-
-system(paste0("/usr/local/anaconda3/bin/plotHeatmap   -m results/H3K27me3/clustering/markers_bed/metagene_matrix.txt.gz", 
-                                                    " -o results/H3K27me3/clustering/markers_bed/metagene_matrix.pdf", 
-                                                    " --sortRegions no",
-                                                    " --colorList Darkblue,white,red",
-                                                    " --refPointLabel peak",sep = ' '))
-
 ```
-
 
 ```{r do_heatmap}
 
-DoHeatmapMB <- function(object, markers,fraction = 0.2,slot = "data",assay="bins_5kb", clusterColors){
+DoHeatmapMB <- function(object, markers,fraction = 0.2,slot = "data",assay, clusterColors){
   
   object <- object[,sample(colnames(object),length(colnames(object)) * fraction)]
   
@@ -424,9 +352,10 @@ names(clusterColors[[1]]) <- levels(brain.merged@active.ident)
 names(clusterColors[[2]]) <- levels(brain.merged@active.ident)
 
 
-png(filename = "results/H3K27me3/clustering/bins_heatmap.png",width=1000,height=1000)
+png(filename = paste0(params$out_prefix,params$antibody,"/clustering/bins_heatmap.png"),width=1000,height=1000)
 DoHeatmapMB(brain.merged,
             markers = top.markers,
+            assay = 'bins_5000',
             clusterColors = clusterColors,
             slot = 'data')
 dev.off()
@@ -434,7 +363,8 @@ dev.off()
 DoHeatmapMB(brain.merged,
             markers = top.markers,
             clusterColors = clusterColors,
-            slot = 'data')
+            slot = 'data',
+            assay = 'bins_5000')
 
 
 ```

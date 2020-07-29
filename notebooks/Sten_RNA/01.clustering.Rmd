@@ -3,6 +3,7 @@ title: "R Notebook"
 output: html_notebook
 params:
   config: ""
+  out_prefix: ""
 ---
 
 
@@ -18,11 +19,6 @@ set.seed(100)
 ```
 
 
-```{r set_root_dir}
-
-setwd('../../')
-knitr::opts_knit$set(root.dir = getwd())
-```
 # Read config
 
 ```{r read_config}
@@ -30,7 +26,7 @@ config <- yaml::read_yaml(params$config)
 ```
 
 ```{r connect_to_loom}
-stenRNA <- connect(filename=config$input$Sten_RNA$loom_file,mode='r+')
+stenRNA <- connect(filename=config$RNA_seq$Sten_RNA$loom_file,mode='r+')
 meta.data <- data.frame(Age=stenRNA$col.attrs[['Age']][])
 
 for (column in names(stenRNA$col.attrs)[2:length(names(stenRNA$col.attrs))])
@@ -57,9 +53,7 @@ rm(mat)
 ```
 
 ```{r remove_after_debuging}
-saveRDS(object = sten.RNA,file = "sten_RNA_temp.Rds")
-dir.create("results/Sten_RNA/clustering",recursive = TRUE)
-
+saveRDS(object = sten.RNA,file = paste0(params$out_prefix,"sten_RNA_temp.Rds"))
 ```
 
 
@@ -73,7 +67,9 @@ sten.RNA <- FindNeighbors(sten.RNA, dims = 1:15)
 sten.RNA <- FindClusters(sten.RNA, resolution = 0.5)
 sten.RNA <- RunUMAP(sten.RNA, dims = 1:15)
 DimPlot(sten.RNA,group.by = "Taxonomy_group",label=TRUE,repel=TRUE) + NoLegend()
-saveRDS(object = sten.RNA,"results/Sten_RNA/clustering/01.clustering_20000cells.Rds")
+
+## Save
+saveRDS(object = sten.RNA,paste0(params$out_prefix,"01.clustering_20000cells.Rds"))
 ```
 
 
@@ -85,7 +81,7 @@ DimPlot(sten.RNA,label=TRUE,repel=TRUE,pt.size = 1) + NoLegend()
 
 ```{r markers}
 markers <- FindAllMarkers(sten.RNA,min.pct = 0.1,logfc.threshold = 0.5,only.pos = TRUE)
-write.csv2(x = markers,file = "results/Sten_RNA/clustering/sten_RNA_markers.csv")
+write.csv2(x = markers,file = paste0(params$out_prefix,"sten_RNA_markers.csv"))
 ```
 
 

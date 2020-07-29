@@ -103,6 +103,19 @@ samples:
     Age: P25
     Antibody: H3K27ac
 
+
 general:
   clustering_window: [1000,10000,5000,25000,50000,100000]
   conda_env: CT_snakemake
+
+RNA_seq:
+  Sox10_RNA:
+    # Output from cellranger
+    replicate1:    /data/proj/GCB_MB/CT/RNA_seq/10X_20_033b/
+    replicate2:    /data/proj/GCB_MB/CT/RNA_seq/10X_20_034b/
+  Sten_RNA:
+    # Loom file from Linnarsson web
+    loom_source:  https://storage.googleapis.com/linnarsson-lab-loom/l5_all.loom
+    loom_file:     results/Sten_RNA/l5_all.loom
+
+

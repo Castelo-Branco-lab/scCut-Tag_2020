@@ -8,6 +8,12 @@ if (!'Signac' %in% rownames(installed.packages())){
   install.packages('Signac',repos='http://cran.us.r-project.org')
 }
 
+if (!'harmony' %in% rownames(installed.packages())){
+  cat("Installing missing package harmony \n")
+  devtools::install_github("immunogenomics/harmony")
+}
+
+
 
 cat("*** Loading libraries")
 suppressMessages({
@@ -228,6 +234,7 @@ seurat_object            <- RenameCells(object = seurat_object,add.cell.id = arg
 
 seurat_object$antibody   <- config$sample[[args$sample]]$Antibody
 seurat_object$GFP        <- config$sample[[args$sample]]$GFP
+seurat_object$Age        <- config$sample[[args$sample]]$Age
 
 
 ########## Create Gene activity matrix 

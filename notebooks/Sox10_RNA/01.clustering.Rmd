@@ -5,23 +5,16 @@ output:
     df_print: paged
 params:
   config: ""
+  out_prefix: ""
 ---
 
 ```{r libraries}
 library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
 library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
-library(patchwork,quietly = TRUE,warn.conflicts = FALSE)
 library(ggplot2,quietly = TRUE,warn.conflicts = FALSE)
 library(harmony,quietly = TRUE,warn.conflicts = FALSE)
 
 set.seed(2020)
-rm(list=ls())
-```
-
-```{r set_root_dir}
-
-setwd('../../')
-knitr::opts_knit$set(root.dir = getwd())
 ```
 
 ```{r read_config}
@@ -30,10 +23,8 @@ config <- yaml::read_yaml(params$config)
 
 
 ```{r load_10x}
-
-print(getwd())
-brain1 <- Read10X(config$input$Sox10_RNA$replicate1)
-brain2 <- Read10X(config$input$Sox10_RNA$replicate2)
+brain1 <- Read10X(paste0(config$RNA_seq$Sox10_RNA$replicate1,'outs/filtered_feature_bc_matrix'))
+brain2 <- Read10X(paste0(config$RNA_seq$Sox10_RNA$replicate2,'outs/filtered_feature_bc_matrix'))
 
 # Create seurat objects
 brain1 <- CreateSeuratObject(counts = brain1, project = "scRNA", min.cells = 3, min.features = 200)
@@ -119,9 +110,9 @@ p1
 ```
 
 ```{r save_objects}
-saveRDS(object = brain, file = "results/Sox10_RNA/clustering/all_cells/01.clustering.Rds")
-write.csv2(markers,"results/Sox10_RNA/clustering/all_cells//markers.csv")
-png("results/Sox10_RNA/clustering/all_cells/heatmap.png",width=1024,height=1024)
+saveRDS(object = brain, file = paste0(params$out_prefix,"all_cells/01.clustering.Rds"))
+write.csv2(markers,paste0(params$out_prefix,"all_cells/markers.csv"))
+png(paste0(params$out_prefix,"all_cells/heatmap.png"),width=1024,height=1024)
 p1
 dev.off()
 ```
@@ -177,9 +168,9 @@ VlnPlot(brain.GFP,features=c("Aqp4","Slc1a2","Sox9","Rfx4"),pt.size=0,ncol = 2)
 
 brain.GFP$cell_type <- brain.GFP@active.ident
 
-saveRDS(object = brain.GFP, file = "results/Sox10_RNA/clustering/GFP/01.clustering.Rds")
-write.csv2(markers.GFP,"results/Sox10_RNA/clustering/GFP/markers.csv")
-png("results/Sox10_RNA/clustering/GFP/heatmap.png",width=1024,height=1024)
+saveRDS(object = brain.GFP, file = paste0(params$out_prefix,"GFP/01.clustering.Rds"))
+write.csv2(markers.GFP,paste0(params$out_prefix,"GFP/markers.csv"))
+png(paste0(params$out_prefix,"GFP/heatmap.png"),width=1024,height=1024)
 p1
 dev.off()
 ```

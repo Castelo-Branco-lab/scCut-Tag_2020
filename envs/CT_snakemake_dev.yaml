@@ -2,7 +2,9 @@ name: CT_snakemake
 channels:
   - conda-forge
   - bioconda
+  - r
   - defaults
+  - grst
 dependencies:
   - python=3.6
   - snakemake
@@ -22,9 +24,12 @@ dependencies:
   - r-viridis
   - r-ggplot2
   - r-gridextra
+  - r-devtools
+  - r-rcpparmadillo
   - bioconductor-ensdb.mmusculus.v79
   - bioconductor-ensdb.hsapiens.v86
   - bioconductor-bsgenome.mmusculus.ucsc.mm10
+  - bioconductor-singlecellexperiment
 
   
   
