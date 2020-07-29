@@ -52,7 +52,11 @@ rule all:
     # Clustering final
     expand("results/{antibody}/clustering/01.clustering.html", antibody = ['H3K27me3','H3K4me3',"H3K27ac"]), # ,antibody = antibody_list)
     expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac"])
+    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
+
+    # Export bam per cluster
+    expand(directory('results/{sample}/outs/per_cluster/sam_files/'), sample = ["H3K27ac_N1","H3K27ac_N2"]),
+    directory('results/scATAC_P50/'),
 
 
 rule bam_to_bw:
@@ -174,27 +178,6 @@ rule cell_selection:
   shell:
       "Rscript {params.script}  --sample {params.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {params.binwidth}"
 
-# rule H3K4me3_final:
-#   input:
-#     lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == "H3K4me3"]),
-#     'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-#     'results/Sox10_RNA/clustering/GFP/markers.csv'
-#   output:
-#     seurat  = "results/H3K4me3/clustering/01.clustering.Rds",
-#     report  = 'results/H3K4me3/clustering/01.clustering.html',
-#     markers = "results/H3K4me3/clustering/markers.csv",
-#     bigwig  = directory("results/H3K4me3/clustering/bigwig/"),
-#     bed     = directory("results/H3K4me3/clustering/markers_bed/")
-#   params:
-#     notebook       = os.path.dirname(workflow.basedir) + "/notebooks/H3K4me3/H3K4me3_clustering_merge.Rmd",
-#     config         = config_file,
-#     out_prefix     = CWD + '/results/',
-#     report         = CWD + '/results/H3K4me3/clustering/01.clustering.html',
-#     antibody       = 'H3K4me3',
-#   shell:
-#     " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{params.antibody}'))\" "
-
-
 rule clustering_final:
   input:
     lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == wildcards.antibody]),
@@ -214,47 +197,6 @@ rule clustering_final:
     antibody       = '{antibody}',
   shell:
     " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{params.antibody}'))\" "
-
-
-# rule H3K7me3_final:
-#   input:
-#     lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == "H3K27me3"]),
-#     'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-#     'results/Sox10_RNA/clustering/GFP/markers.csv'
-#   output:
-#     seurat  = "results/H3K27me3/clustering/01.clustering.Rds",
-#     report  = "results/H3K27me3/clustering/01.clustering.html",
-#     markers = "results/H3K27me3/clustering/markers.csv",
-#     bigwig  = directory("results/H3K27me3/clustering/bigwig/"),
-#     bed     = directory("results/H3K27me3/clustering/markers_bed/")
-#   params:
-#     notebook       = os.path.dirname(workflow.basedir) + "/notebooks/H3K27me3/H3K27me3_clustering_merge.Rmd",
-#     config         = config_file,
-#     out_prefix     = CWD + '/results/',
-#     report         = CWD + '/results/H3K27me3/clustering/01.clustering.html',
-#     antibody       = 'H3K27me3',
-#   shell:
-#     " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{params.antibody}'))\" "
-
-# rule H3K7ac_final:
-#   input:
-#     lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == 'H3K27ac']),
-#     'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-#     'results/Sox10_RNA/clustering/GFP/markers.csv'
-#   output:
-#     seurat  = "results/H3K27ac/clustering/01.clustering.Rds",
-#     report  = "results/H3K27ac/clustering/01.clustering.html",
-#     markers = "results/H3K27ac/clustering/markers.csv",
-#     bigwig  = directory("results/H3K27ac/clustering/bigwig/"),
-#     bed     = directory("results/H3K27ac/clustering/markers_bed/")
-#   params:
-#     notebook       = os.path.dirname(workflow.basedir) + "/notebooks/H3K27ac/H3K27ac_clustering_merge.Rmd",
-#     config         = config_file,
-#     out_prefix     = CWD + '/results/',
-#     report         = CWD + '/results/H3K27ac/clustering/01.clustering.html',
-#     antibody       = 'H3K27ac',
-#   shell:
-#     " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{params.antibody}'))\" "
 
 rule metagene:
   input:
@@ -321,6 +263,40 @@ rule Sox10_RNA_clustering:
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}'))\""
 
+rule export_bam:
+  input:
+    seurat = "results/H3K27ac/clustering/01.clustering.Rds",
+    bam    = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+  output:
+    barcode_table = 'results/{sample}/outs/per_cluster/barcode_table.csv',
+    sam_files     = directory('results/{sample}/outs/per_cluster/sam_files/'),
+  params:
+    export_table_script =   os.path.dirname(workflow.basedir) + "/scripts/R/export_barcode_cluster_table.R",
+    filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
+    sample              =   "{sample}",
+  shell:
+    "Rscript {params.export_table_script} {input.seurat} {output.barcode_table}; "
+    "python3 {params.filter_bam} {input.bam} {output.barcode_table} {params.sample} {output.sam_files};"
+    "for file in `ls {output.sam_files}*.sam`; do samtools view -bS -h $file > ${file/.sam/.bam}; "
+    "rm {output.sam_files}*.sam"
+
+
+rule download_ATAC:
+  params:
+    data_url            = config['ATAC_seq']["P50"]["matrix_url"],
+    h5_url              = config['ATAC_seq']["P50"]["matrix_h5_url"],
+    metadata_url        = config['ATAC_seq']["P50"]["metadata_url"],
+    fragments_url       = config['ATAC_seq']["P50"]["fragments_url"],
+    fragments_index_url = config['ATAC_seq']["P50"]["fragments_index_url"],
+  output:
+    directory('results/scATAC_P50/data/')
+  shell:
+    "wget {params.data_url}            -P {output}; "
+    "wget {params.h5_url}              -P {output}; "
+    "wget {params.metadata_url}        -P {output}; "
+    "wget {params.fragments_url}       -P {output}; "
+    "wget {params.fragments_index_url} -P {output}; "
+    "tar -xvf data/*.tar.gz; "
 
 
 

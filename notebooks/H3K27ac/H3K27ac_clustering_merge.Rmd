@@ -193,7 +193,7 @@ p3
 
 ```{r find_markers}
 brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
-markers <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot = 'data')
+markers <- FindAllMarkers(brain.merged,min.pct = 0.04,logfc.threshold = 0.1,slot = 'data')
 
 markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers)
@@ -201,10 +201,10 @@ markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodya
 markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
 markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
-saveRDS(object = brain.merged,      file = paste0(params$out_prefix,antibody,"/clustering/01.clustering.Rds"))
-write.csv2(  x = markers,           file = paste0(params$out_prefix,antibody,"/clustering/markers.csv"))
-write.csv2(  x = markers.top,       file = paste0(params$out_prefix,antibody,"/clustering/markers_top.csv"))
-write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,antibody,"/clustering/markers_negative.csv"))
+saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
+write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
 
 ```
 
@@ -274,7 +274,7 @@ rtracklayer::export.bw(object = coverage.x,con = paste0(params$out_prefix,params
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC)
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(200, wt=avg_logFC)
 
 # Reorder markers
 top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])
