@@ -33,10 +33,12 @@ rule all:
 		# MACS2 peak calling 
     expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_list),
     expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_list),
+    expand("results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Olig2']),
 
     # Merged files accross replicates
-    #expand("results/merged/{antibody}/possorted_bam.bam", antibody = list(set(antibody_list))),
+    expand("results/merged/{antibody}/possorted_bam.bam", antibody = ['Olig2']),                                    #list(set(antibody_list))),
     expand("results/{sample}/outs/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),
+
 
     # Barcode statistics for cell selection
     expand("results/{sample}/barcode_statistics/all_barcodes.txt",sample = samples_list),
@@ -48,11 +50,12 @@ rule all:
     # RNA-seq clustering
     #'results/Sten_RNA/01.clustering.html',
     'results/Sox10_RNA/01.clustering.html',
+    'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
 
     # Clustering final
-    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3"]), # ,antibody = antibody_list)
+    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2"]), # ,antibody = antibody_list)
     #expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3"]),
+    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2"]),
 
     # Export bam per cluster
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
@@ -77,7 +80,7 @@ rule bam_to_bw:
 
 rule run_macs_narrow:
     input:
-       lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+       lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
     output:
         "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     params:
@@ -99,6 +102,17 @@ rule run_macs_broad:
     shell:
         "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
         "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 --broad-cutoff=0.1 --broad 2>&1 "
+
+rule macs_merged:
+  input:
+    "results/merged/{antibody}/possorted_bam.bam"
+  output:
+    "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak"
+  params:
+    macs_outdir = "results/merged/{antibody}/macs/narrow/"
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} "
+        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
 
 rule barcode_statistics_peaks:
     input:
@@ -150,10 +164,9 @@ rule add_barcode_fragments:
     conda: '../envs/CT_snakemake.yaml'
     params:
         script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
-        sample         = '{sample}'
     shell:
         "set +o pipefail; "
-        "python3 {params.script} {input.fragments} {params.sample} | bgzip > {output.fragments}; "
+        "python3 {params.script} {input.fragments} {wildcards.sample} | bgzip > {output.fragments}; "
         "tabix -p bed {output.fragments}"
 
 rule cell_selection:
@@ -176,12 +189,10 @@ rule cell_selection:
   conda: '../envs/CT_snakemake.yaml'
   params:
       script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
-      binwidth       = "{binwidth}",
       out_prefix     = "results/{sample}/cell_picking/{binwidth}/", 
       config_file    = config_file,
-      sample         = "{sample}"
   shell:
-      "Rscript {params.script}  --sample {params.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {params.binwidth}"
+      "Rscript {params.script}  --sample {wildcards.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {wildcards.binwidth}"
 
 rule clustering_final:
   input:
@@ -200,9 +211,8 @@ rule clustering_final:
     config         = config_file,
     out_prefix     = CWD + '/results/',
     report         = CWD + '/results/{antibody}/clustering/01.clustering.html',
-    antibody       = '{antibody}',
   shell:
-    " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{params.antibody}'))\" "
+    " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
 
 rule metagene:
   input:
@@ -268,6 +278,16 @@ rule Sox10_RNA_clustering:
 
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}'))\""
+
+rule Sox10_RNA_TPM:
+  input:
+    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds'
+  output:
+    'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv'
+  params:
+    script = os.path.dirname(workflow.basedir) + "/scripts/R/Seurat_TPM.R",
+  shell:
+    'Rscript {params.script} {input} {output}'
 
 rule export_bam:
   input:
