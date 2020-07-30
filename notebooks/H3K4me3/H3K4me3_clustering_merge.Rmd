@@ -387,6 +387,14 @@ DoHeatmapMB(brain.merged,
 
 
 
+```{r}
+cluster.annotations           <- data.frame(cluster=brain.merged@active.ident,barcode=names(brain.merged@active.ident))
+colnames(cluster.annotations) <- paste0("#",colnames(cluster.annotations))
+
+write.csv(x = cluster.annotations, file=paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/cluster_barcode_table.csv'),row.names = FALSE,quote = FALSE,)
+
+```
+
 
 
 

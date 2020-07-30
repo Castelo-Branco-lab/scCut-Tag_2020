@@ -50,13 +50,18 @@ rule all:
     'results/Sox10_RNA/01.clustering.html',
 
     # Clustering final
-    expand("results/{antibody}/clustering/01.clustering.html", antibody = ['H3K27me3','H3K4me3',"H3K27ac"]), # ,antibody = antibody_list)
-    expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
+    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3"]), # ,antibody = antibody_list)
+    #expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
+    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3"]),
 
     # Export bam per cluster
-    expand(directory('results/{sample}/outs/per_cluster/sam_files/'), sample = ["H3K27ac_N1","H3K27ac_N2"]),
-    directory('results/scATAC_P50/'),
+    directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
+    directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
+    directory('results/scATAC_P50/clustering/bam_per_cluster/scATAC/'),
+    #directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
+
+    # scATAC
+    'results/scATAC_P50/clustering/clustering_scATAC.Rds',
 
 
 rule bam_to_bw:
@@ -172,7 +177,7 @@ rule cell_selection:
   params:
       script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
       binwidth       = "{binwidth}",
-      out_prefix     = "results/{sample}/cell_picking/{binwidth}/",
+      out_prefix     = "results/{sample}/cell_picking/{binwidth}/", 
       config_file    = config_file,
       sample         = "{sample}"
   shell:
@@ -188,7 +193,8 @@ rule clustering_final:
     report  = "results/{antibody}/clustering/01.clustering.html",
     markers = "results/{antibody}/clustering/markers.csv",
     bigwig  = directory("results/{antibody}/clustering/bigwig/"),
-    bed     = directory("results/{antibody}/clustering/markers_bed/")
+    bed     = directory("results/{antibody}/clustering/markers_bed/"),
+    table   = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv",
   params:
     notebook       = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/{antibody}_clustering_merge.Rmd",
     config         = config_file,
@@ -265,40 +271,42 @@ rule Sox10_RNA_clustering:
 
 rule export_bam:
   input:
-    seurat = "results/H3K27ac/clustering/01.clustering.Rds",
-    bam    = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
+    table = 'results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv',
   output:
-    barcode_table = 'results/{sample}/outs/per_cluster/barcode_table.csv',
-    sam_files     = directory('results/{sample}/outs/per_cluster/sam_files/'),
+    sam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
   params:
-    export_table_script =   os.path.dirname(workflow.basedir) + "/scripts/R/export_barcode_cluster_table.R",
     filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
-    sample              =   "{sample}",
+    sample              =   lambda wildcards: "NA" if wildcards.antibody == "scATAC_P50" else "{sample}",
   shell:
-    "Rscript {params.export_table_script} {input.seurat} {output.barcode_table}; "
-    "python3 {params.filter_bam} {input.bam} {output.barcode_table} {params.sample} {output.sam_files};"
-    "for file in `ls {output.sam_files}*.sam`; do samtools view -bS -h $file > ${file/.sam/.bam}; "
-    "rm {output.sam_files}*.sam"
+    "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.sam_files}; "
+    
 
 
-rule download_ATAC:
-  params:
-    data_url            = config['ATAC_seq']["P50"]["matrix_url"],
-    h5_url              = config['ATAC_seq']["P50"]["matrix_h5_url"],
-    metadata_url        = config['ATAC_seq']["P50"]["metadata_url"],
-    fragments_url       = config['ATAC_seq']["P50"]["fragments_url"],
-    fragments_index_url = config['ATAC_seq']["P50"]["fragments_index_url"],
+rule download_ATAC:  
   output:
     directory('results/scATAC_P50/data/')
+  params:
+    url = " ".join(list(config['ATAC_seq']['P50']['url'].values()))
   shell:
-    "wget {params.data_url}            -P {output}; "
-    "wget {params.h5_url}              -P {output}; "
-    "wget {params.metadata_url}        -P {output}; "
-    "wget {params.fragments_url}       -P {output}; "
-    "wget {params.fragments_index_url} -P {output}; "
-    "tar -xvf data/*.tar.gz; "
+    'wget -P {output} {params.url}'
 
-
+rule analyze_ATAC:
+  input:
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+  output:
+    seurat_object = 'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+    bigwig        = directory('results/scATAC_P50/clustering/bigwig/'),
+    barcode_table = 'results/scATAC_P50/clustering/bam_per_cluster/cluster_barcode_table.csv',
+  params:
+    notebook      = os.path.dirname(workflow.basedir) + '/notebooks/scATAC/01.clustering.Rmd',
+    out_prefix    = CWD + '/results/',
+    report        = CWD + '/results/scATAC_P50/clustering/01.clustering.html',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
 
 

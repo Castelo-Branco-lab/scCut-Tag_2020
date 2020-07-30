@@ -7,10 +7,11 @@ params:
   config: '../../config/config.yaml'
   out_prefix: "~/mount/CT/git_test/results/" #'results/'
   antibody: 'H3K36me3'
-  window: 25000
+  window: 50000
 ---
 
 ```{r libraries}
+#suppressPackageStartupMessages
 library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
 library(gridExtra,quietly = TRUE,warn.conflicts = FALSE)
 library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
@@ -30,6 +31,7 @@ set.seed(100)
 
 ```{r read_config}
 config <- yaml::read_yaml(params$config)
+#config <- yaml::read_yaml('../../config/config_copy.yaml')
 ```
 
 ```{r load_annotation}
@@ -68,7 +70,8 @@ brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 
 
 ```{r filter_lowUMI}
-brain.merged  <- brain.merged[,brain.merged$logUMI > 1.8]
+brain.merged  <- brain.merged[,brain.merged$logUMI > 1.0]
+brain.merged  <- brain.merged[,brain.merged$all_unique_MB > 10^3.8]
 
 ```
 
@@ -79,7 +82,7 @@ brain.merged  <- brain.merged[,brain.merged$logUMI > 1.8]
 assay = paste0("bins_",window)
 
 brain.merged <- RunTFIDF(brain.merged)
-brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q50')
+brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q5')
   
 brain.merged <- RunSVD(
   object = brain.merged,
@@ -132,7 +135,7 @@ FeaturePlot(brain.merged,'logUMI',max.cutoff = 3) + scale_color_viridis_c()
 p1 + p2
 p3 + p4
 
-do.call(grid.arrange,p.ls)
+do.call(grid.arrange,c(p.ls,nrow=1))
 ```
 
 
@@ -163,7 +166,7 @@ brain.merged <- AddMetaData(brain.merged,metadata = markers.agg.df,col.name = co
 
 
 lapply(as.character(colnames(markers.agg.df)),function(x){
-  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()
+  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.95,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()
   #FeaturePlot(brain,x,max.cutoff = 0.08,min.cutoff = 0.02) + scale_color_viridis_c(limits=c(0.02,0.08)) 
   })
 
@@ -178,12 +181,15 @@ lapply(as.character(colnames(markers.agg.df)),function(x){
 
 
 ```{r,fig.width=8,fig.height=4}
-brain.merged <- RenameIdents(brain.merged,'0'='mOL','3'='mOL','1' = 'Astrocytes','2'= 'VLMC', '4'= 'OEC','5' = 'OPC')
+brain.merged <- RenameIdents(brain.merged,'0'='Astrocytes','1'='mOL','2' = 'Vascular','3'= 'OEC', '4'= 'OPC', '5'  = 'Unknown')
 brain.merged$cell_type <- brain.merged@active.ident
+
+GFP_colors        <- RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)]
+names(GFP_colors) <- c("GFP-","GFP+")
 
 p1 <- DimPlot(object = brain.merged, group.by='Age',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
 p2 <- DimPlot(object = brain.merged, label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
-p3 <- DimPlot(object = brain.merged, group.by='GFP',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend() + scale_color_manual(values = RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)])
+p3 <- DimPlot(object = brain.merged, group.by='GFP',label = TRUE,reduction = 'umap',pt.size=0.1) + scale_color_manual(values = GFP_colors) + theme(legend.position = 'bottom')
 
 p1
 p2
@@ -193,18 +199,18 @@ p3
 
 ```{r find_markers}
 brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
-markers <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot = 'data')
+markers <- FindAllMarkers(brain.merged,min.pct = 0.02,logfc.threshold = 0.1,slot = 'data')
 
 markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers)
 
-markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
-markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
+markers.top <- markers %>% dplyr::filter(avg_logFC > 0) %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.negative <- markers %>% dplyr::filter(avg_logFC < 0) %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
-saveRDS(object = brain.merged,      file = paste0(params$out_prefix,antibody,"/clustering/01.clustering.Rds"))
-write.csv2(  x = markers,           file = paste0(params$out_prefix,antibody,"/clustering/markers.csv"))
-write.csv2(  x = markers.top,       file = paste0(params$out_prefix,antibody,"/clustering/markers_top.csv"))
-write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,antibody,"/clustering/markers_negative.csv"))
+saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
+write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
 
 ```
 
@@ -274,7 +280,7 @@ rtracklayer::export.bw(object = coverage.x,con = paste0(params$out_prefix,params
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC)
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(200, wt=avg_logFC)
 
 # Reorder markers
 top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])
@@ -360,3 +366,15 @@ DoHeatmapMB(brain.merged,
 
 
 ```
+
+
+```{r}
+cluster.annotations           <- data.frame(cluster=brain.merged@active.ident,
+                                            barcode=names(brain.merged@active.ident))
+
+colnames(cluster.annotations) <- paste0("#",colnames(cluster.annotations))
+
+write.csv(x = cluster.annotations, file=paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/cluster_barcode_table.csv'),row.names = FALSE,quote = FALSE,)
+
+```
+
