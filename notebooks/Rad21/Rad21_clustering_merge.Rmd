@@ -6,12 +6,11 @@ output:
 params:
   config: '../../config/config.yaml'
   out_prefix: "~/mount/CT/git_test/results/" #'results/'
-  antibody: 'Olig2'
-  window: 5000
+  antibody: 'Rad21'
+  window: 25000
 ---
 
 ```{r libraries}
-#suppressPackageStartupMessages
 library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
 library(gridExtra,quietly = TRUE,warn.conflicts = FALSE)
 library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
@@ -24,6 +23,7 @@ library(yaml,quietly = TRUE,warn.conflicts = FALSE)
 library(pheatmap,quietly = TRUE,warn.conflicts = FALSE)
 
 
+getwd()
 set.seed(100)
 ```
 
@@ -31,10 +31,11 @@ set.seed(100)
 
 ```{r read_config}
 config <- yaml::read_yaml(params$config)
-#config <- yaml::read_yaml('../../config/config_copy.yaml')
 ```
 
-```{r load_annotation}
+# load annotations
+
+```{r load_gene_annotations}
 gene.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "protein_coding")
 lncRNA.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "lincRNA")
 gene.coords <- c(gene.coords,lncRNA.coords)
@@ -49,8 +50,6 @@ genebodyandpromoter.coords.flat <- Signac::Extend(genebody.coords.flat,upstream 
 # Retrieve gene names from the original annotation (lost because of flatenning)
 genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.coords.flat,genebody.coords)]$gene_name
 ```
-
-# Reduce dimensionality with LSI and plot the loadings
 
 ```{r load_and_merge}
 samples <- names(which(unlist(lapply(config$samples,function(x){x$Antibody == params$antibody}))))
@@ -68,9 +67,8 @@ brain.ls <- lapply(samples,function(x){
 brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 ```
 
-
-```{r filter_lowUMI}
-brain.merged  <- brain.merged[,brain.merged$logUMI > 1.0]
+```{r filter_blacklist}
+brain.merged <- brain.merged[,brain.merged$logUMI > 1]
 
 # Blacklist
 rows.pass             <- GRangesToString(subsetByOverlaps(x = StringToGRanges(rownames(brain.merged)),ranges = blacklist_mm10,invert = TRUE))
@@ -80,72 +78,10 @@ brain.merged[[assay]] <- CreateAssayObject(counts = bins.mat)
 ```
 
 
-
 ```{r cluster_and_dimreduce}
 # Re-do the dimreduction
-DefaultAssay(brain.merged) <- assay
+assay = paste0("bins_",window)
 
-brain.merged <- RunTFIDF(brain.merged)
-brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q10')
-  
-brain.merged <- RunSVD(
-  object = brain.merged,
-  assay = assay,
-  reduction.key = 'LSI_',
-  reduction.name = 'lsi'
-)
-  
-brain.merged <- RunUMAP(
-  object = brain.merged,
-  reduction = 'lsi',
-  dims = 2:15
-)
-
-brain.merged <- FindNeighbors(
-  object = brain.merged,
-  reduction = 'lsi',
-  dims = 2:20
-)
-brain.merged <- FindClusters(
-  object = brain.merged,
-  algorithm = 3,
-  resolution = 0.2,
-  verbose = FALSE
-)
-  
-DimPlot(brain.merged,label=TRUE)
-DimPlot(brain.merged,group.by='sample') + theme(legend.position = 'bottom')
-
-```
-
-# Dimensionality reduction using peaks gives similar results
-
-```{r peaks_dimreduce}
-peaks <- rtracklayer::import(paste0(params$out_prefix,'/merged/',params$antibody,'/macs/narrow/',params$antibody,'_peaks.narrowPeak'))
-peaks <- subsetByOverlaps(x = peaks,ranges =  blacklist_mm10,invert = TRUE)
-
-fragments <- paste0(params$out_prefix,unique(brain.merged$orig.ident),'/outs/fragments.tsv.gz')
-names(fragments) <- unique(brain.merged$orig.ident)
-
-
-peak.matrix.ls <- lapply(names(fragments),function(x){
-  FeatureMatrix(fragments = fragments[x],features = peaks,cells = colnames(brain.merged[,brain.merged$orig.ident == x]))
-})
-
-rows.summary <- table(unlist(lapply(peak.matrix.ls,rownames))) 
-common.rows  <- names(rows.summary[rows.summary == length(peak.matrix.ls)])
-
-peak.matrix.ls<-  lapply(peak.matrix.ls,function(x){
-  x[common.rows,]
-})
-
-peak.matrix.merged <- do.call(cbind,peak.matrix.ls)
-
-brain.merged[['peaks']] <- CreateAssayObject(counts = peak.matrix.merged)
-
-
-assay <- 'peaks'
-DefaultAssay(brain.merged) <- assay
 brain.merged <- RunTFIDF(brain.merged)
 brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q0')
   
@@ -159,17 +95,29 @@ brain.merged <- RunSVD(
 brain.merged <- RunUMAP(
   object = brain.merged,
   reduction = 'lsi',
-  dims = 2:20
+  dims = 2:30
 )
 
+brain.merged <- FindNeighbors(
+  object = brain.merged,
+  reduction = 'lsi',
+  dims = 2:30
+)
+brain.merged <- FindClusters(
+  object = brain.merged,
+  algorithm = 3,
+  resolution = 0.3,
+  verbose = FALSE
+)
   
 DimPlot(brain.merged,label=TRUE)
-DimPlot(brain.merged,group.by='sample') + theme(legend.position = 'bottom')
+
 ```
 
 
 
-```{r plots, fig.width=12,fig.height=6}
+
+```{r plots, fig.width=6,fig.height=3}
 
 p1 <- DimPlot(brain.merged,group.by='sample') + NoLegend() + theme(legend.position = 'bottom')
 p2 <- DimPlot(brain.merged,label=TRUE)+ NoLegend()
@@ -180,32 +128,42 @@ p4 <- DimPlot(brain.merged,group.by = 'GFP') + scale_color_manual(values = brewe
 
 p.ls <- lapply(unique(brain.merged$sample),function(x){
   to_plot <- brain.merged[,brain.merged$sample == x]
-  DimPlot(to_plot,label=TRUE,pt.size=0.3)+ NoLegend() + ggtitle(paste(x,unique(to_plot$Age), unique(to_plot$GFP))) + theme(plot.title = element_text(size=12)) + coord_cartesian(xlim=c(-10,10),ylim=c(-7,7))
+  DimPlot(to_plot,label=TRUE,pt.size=0.3)+ NoLegend() + ggtitle(paste(x,unique(to_plot$Age), unique(to_plot$GFP))) + theme(plot.title = element_text(size=12)) + coord_cartesian(xlim=c(-15,15),ylim=c(-10,10))
 })
 
 FeaturePlot(brain.merged,'logUMI',max.cutoff = 3) + scale_color_viridis_c() 
 p1 + p2
 p3 + p4
 
-do.call(grid.arrange,c(p.ls,nrow=1))
+do.call(grid.arrange,p.ls)
 ```
+
+
+
+
+
 
 
 ```{r load_RNA_markers}
-markers <- read.csv2(file=paste0(params$out_prefix,'Sox10_RNA/clustering/GFP/markers.csv'),row.names = 1)
+markers.Sox10 <- read.csv2(file=paste0(params$out_prefix,'Sox10_RNA/clustering/GFP/markers.csv'),row.names = 1)
+markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
 ```
 
 
 
-```{r Plot_RNA_modules_projection,fig.width=6,fig.height=6}
+
+
+```{r Plot_RNA_modules_projection,fig.width=3,fig.height=3}
 assay='GA'
+
+markers.Sox10$cluster <- paste0('Sox10_',markers.Sox10$cluster)
+markers               <- rbind(markers,markers.Sox10)
 
 brain.markers.ls <- lapply(unique(markers$cluster),function(x){
   marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
   marker.genes <- head(marker.genes,200)
-  marker.genes.agg.exp <- Matrix::colSums(brain.merged[[assay]]@counts[rownames(brain.merged[[assay]]) %in% marker.genes,])
-  marker.genes.agg.exp <- marker.genes.agg.exp[marker.genes.agg.exp > 1]
-  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain.merged[[assay]]@counts)[names(marker.genes.agg.exp)]
+  marker.genes.agg.exp <- Matrix::colSums(brain.merged[[assay]]@data[rownames(brain.merged[[assay]]) %in% marker.genes,])
+  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain.merged[[assay]]@counts)
   return(marker.genes.agg.exp)
 })
 
@@ -219,81 +177,54 @@ brain.merged <- AddMetaData(brain.merged,metadata = markers.agg.df,col.name = co
 
 
 lapply(as.character(colnames(markers.agg.df)),function(x){
-  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.95,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE),pt.size = 1) + scale_color_viridis_c() 
+  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()
   #FeaturePlot(brain,x,max.cutoff = 0.08,min.cutoff = 0.02) + scale_color_viridis_c(limits=c(0.02,0.08)) 
   })
 
 
 ```
 
-
-```{r Plot_H3K27ac_modules_projection,fig.width=6,fig.height=6}
-markers <- read.csv2(file=paste0(params$out_prefix,'H3K27ac/clustering/markers.csv'),row.names = 1)
-assay='bins_5000'
-
-brain.markers.ls <- lapply(unique(markers$cluster),function(x){
-  marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
-  marker.genes <- head(marker.genes,500)
-  marker.genes.agg.exp <- Matrix::colSums(brain.merged[[assay]]@counts[rownames(brain.merged[[assay]]) %in% marker.genes,])
-  #marker.genes.agg.exp <- marker.genes.agg.exp[marker.genes.agg.exp > 1]
-  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain.merged[[assay]]@counts)[names(marker.genes.agg.exp)]
-  return(marker.genes.agg.exp)
-})
-
-names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
-markers.agg.df           <- do.call(cbind,brain.markers.ls)
-colnames(markers.agg.df) <- paste0("marker_",gsub(" ",".",colnames(markers.agg.df)))
-
-
-brain.merged <- AddMetaData(brain.merged,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
-
-
-
-lapply(as.character(colnames(markers.agg.df)),function(x){
-  FeaturePlot(brain.merged,x,max.cutoff = quantile(markers.agg.df[,x],0.99,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE),pt.size = 1) + scale_color_viridis_c() 
-  #FeaturePlot(brain,x,max.cutoff = 0.08,min.cutoff = 0.02) + scale_color_viridis_c(limits=c(0.02,0.08)) 
-  })
-
-
+############################################################# 
+```{r}
+DimPlot(brain.merged,label=TRUE) + NoLegend()
 ```
 
 
 
+```{r Rename_the_clusters,fig.width=3,fig.height=3}
+# Rename the clusters
+brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
+                                    '1' = 'mOL',
+                                    '2' = 'Unknown',
+                                    '3' = 'Unknown')
 
-
-
-```{r,fig.width=8,fig.height=4}
-brain.merged <- RenameIdents(brain.merged,'0'='non_oligo','1'='oligo','2'='oligo')
 brain.merged$cell_type <- brain.merged@active.ident
-
-GFP_colors        <- RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)]
-names(GFP_colors) <- c("GFP-","GFP+")
 
 p1 <- DimPlot(object = brain.merged, group.by='Age',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
 p2 <- DimPlot(object = brain.merged, label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend()
-p3 <- DimPlot(object = brain.merged, group.by='GFP',label = TRUE,reduction = 'umap',pt.size=0.1) + scale_color_manual(values = GFP_colors) + theme(legend.position = 'bottom')
+p3 <- DimPlot(object = brain.merged, group.by='GFP',label = TRUE,reduction = 'umap',pt.size=0.1) + NoLegend() + scale_color_manual(values = RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)])
 
 p1
 p2
 p3
-
 ```
 
-```{r find_markers_peaks}
+```{r find_markers}
 brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
-markers <- FindAllMarkers(brain.merged,min.pct = 0.02,logfc.threshold = 0.1,slot = 'data')
+markers <- FindAllMarkers(brain.merged,min.pct = 0.04,logfc.threshold = 0.1,slot = 'data')
 
 markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers)
 
-markers.top <- markers %>% dplyr::filter(avg_logFC > 0) %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
-markers.negative <- markers %>% dplyr::filter(avg_logFC < 0) %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
+markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
 saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
-write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/peaks_markers_top.csv"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
+write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
+
 ```
-
-
 
 ```{r export_bw}
 samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
@@ -351,15 +282,29 @@ rtracklayer::export.bw(object = coverage.x,con = paste0(params$out_prefix,params
 
 ```
 
-
 # Export marker bed file 
 
-# Here, the marker bed file is made of peaks
+```{r find_markers_peaks}
+DefaultAssay(brain.merged) <- 'peaks'
+
+
+markers.peaks <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot = 'data')
+
+markers.peaks$closest_gene <- ClosestFeature(StringToGRanges(markers.peaks$gene ), genebodyandpromoter.coords.flat)$name
+#View(markers.peaks)
+
+markers.peaks.top <- markers.peaks %>% dplyr::filter(avg_logFC > 0) %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.peaks.negative <- markers.peaks %>% dplyr::filter(avg_logFC < 0) %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
+
+write.csv2(  x = markers.peaks.top, file = paste0(params$out_prefix,params$antibody,"/clustering/peaks_markers_top.csv"))
+```
+
+
 ```{r export_bed}
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(200, wt=avg_logFC)
+top.markers <- markers.peaks %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC)
 
 # Reorder markers
 top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])
@@ -373,26 +318,6 @@ lapply(levels(top.markers$cluster),function(x){
   top.markers.x <- sort(StringToGRanges(top.markers.x$gene))
   rtracklayer::export.bed(object = top.markers.x,con = paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/markers_cluster_",x,".bed"))
 })
-```
-
-
-```{r find_markers_bins}
-assay = paste0('bins_',window)
-DefaultAssay(brain.merged) <- assay
-
-brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
-markers <- FindAllMarkers(brain.merged,min.pct = 0.02,logfc.threshold = 0.1,slot = 'data')
-
-markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
-#View(markers)
-
-markers.top <- markers %>% dplyr::filter(avg_logFC > 0) %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
-markers.negative <- markers %>% dplyr::filter(avg_logFC < 0) %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
-
-write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
-write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
-write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
-
 ```
 
 ```{r do_heatmap}
@@ -430,7 +355,7 @@ cells_to_plot <- tibble::rownames_to_column(brain.merged[,cells_to_plot]@meta.da
 clusters_order <- levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(100, wt=p_val)
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(100, wt=avg_logFC)
 top.markers <- top.markers[which(!top.markers$gene %in% names(table(top.markers$gene)[table(top.markers$gene) > 1])),] # remove non-unique
 
 # Reorder markers
@@ -453,26 +378,35 @@ DoHeatmapMB(brain.merged,
             markers = top.markers,
             clusterColors = clusterColors,
             slot = 'data',
-            assay= assay)
+            assay= paste0('bins_',params$window))
 dev.off()
 
 DoHeatmapMB(brain.merged,
             markers = top.markers,
             clusterColors = clusterColors,
             slot = 'data',
-            assay= assay)
+            assay= paste0('bins_',params$window))
 
 
 ```
 
 
-```{r}
-cluster.annotations           <- data.frame(cluster=brain.merged@active.ident,
-                                            barcode=names(brain.merged@active.ident))
 
+
+```{r}
+cluster.annotations           <- data.frame(cluster=brain.merged@active.ident,barcode=names(brain.merged@active.ident))
 colnames(cluster.annotations) <- paste0("#",colnames(cluster.annotations))
 
 write.csv(x = cluster.annotations, file=paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/cluster_barcode_table.csv'),row.names = FALSE,quote = FALSE,)
 
 ```
+
+
+
+
+
+
+
+
+
 

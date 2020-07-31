@@ -53,15 +53,18 @@ rule all:
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
 
     # Clustering final
-    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2"]), # ,antibody = antibody_list)
+    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2","Rad21"]), # ,antibody = antibody_list)
     #expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2"]),
+    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2","Rad21"]),
 
     # Export bam per cluster
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
     directory('results/scATAC_P50/clustering/bam_per_cluster/scATAC/'),
-    #directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
+    directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
+
+    # integration
+    'results/Olig2/integration/integrated.Rds',
 
     # scATAC
     'results/scATAC_P50/clustering/clustering_scATAC.Rds',
@@ -238,7 +241,26 @@ rule Sten_download:
   shell:
     'wget {params.loom_url}  -P {params.download_folder}'
   
+######## Olig2
 
+rule integration_olig2:
+  input:
+    'results/Olig2/clustering/01.clustering.Rds',
+    'results/H3K27ac/clustering/01.clustering.Rds'
+  output:
+    'results/Olig2/integration/integrated.Rds',
+    directory('results/Olig2/integration/bigwig/')
+  params:
+    notebook       = os.path.dirname(workflow.basedir) + "/notebooks/Olig2/Integration_H3K27ac.Rmd",
+    report         = CWD + '/results/Olig2/integration/integrated.html',
+    out_prefix     = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
+
+
+
+
+################# scRNA-seq
 rule Sten_RNA_clustering:
   input:
     config['RNA_seq']['Sten_RNA']['loom_file']
