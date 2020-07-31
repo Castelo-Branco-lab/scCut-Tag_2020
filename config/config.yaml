@@ -20,7 +20,7 @@ samples:
     Age: P25
     Antibody: H3K4me3
   H3K4me3_N3: 
-    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01b/CT_20_MB01
     clustering_params: 
       min_reads_log10: 2.3 
       max_reads_log10: 5
@@ -30,7 +30,7 @@ samples:
     Age: P15
     Antibody: H3K4me3
   H3K4me3_N4: 
-    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB02
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB02b
     clustering_params: 
       min_reads_log10: 2.5
       max_reads_log10: 5.0

@@ -185,12 +185,12 @@ brain.merged <- brain.merged[,!brain.merged@active.ident %in% c(9,10)]
 brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
                                            '1' = 'mOL',
                                            '2' = 'OEC',
-                                           '3' = 'Exc_neurons',
-                                           '4' = 'VLMCs',
+                                           '3' = 'Neurons_1',
+                                           '4' = 'VLMC',
                                            '5' = 'OPC',
                                            '6' = 'mOL',
-                                           '7' = 'micoglia',
-                                           '8' = 'Inh_neurons')
+                                           '7' = 'Micoglia',
+                                           '8' = 'Neurons_3')
 
 brain.merged$cell_type <- brain.merged@active.ident
 

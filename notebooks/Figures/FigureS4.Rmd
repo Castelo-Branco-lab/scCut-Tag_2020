@@ -1,0 +1,140 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+```
+
+
+```{r}
+if (dir.exists("../FigureS4_src")){unlink("../FigureS4_src",recursive = TRUE)}
+dir.create("../FigureS4_src")
+  
+```
+
+
+# H3K27me3
+
+```{r}
+
+brain.H3K27me3 <- readRDS("~/snakemake/figures_paper/H3K27me3/clustering_1/01.clustering_PA_GA.Rds")
+
+brain.H3K27me3$cell_type <- brain.H3K27me3@active.ident
+brain.H3K27me3$cell_type <- factor(brain.H3K27me3$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","OPC"))
+
+
+DefaultAssay(brain.H3K36me3) <- "GA"
+
+marker.genes <- c("Mobp","Opalin","Mog","Mbp")
+
+p <- list()
+for(gene in marker.genes){
+  p[[gene]]     <- featurePlotMB(object = brain.H3K27me3,feature = gene,title = gene,pt.size = 0.5)
+}
+
+do.call(grid.arrange,c(p,nrow=1))
+
+png(file = "../FigureS4_src/H3K27me3_markers.png",width = 2048,height=512)
+do.call(grid.arrange,c(p,nrow=1))
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+metagene <- read.delim("~/snakemake/integration/metagene/H3K4me3_peaks_H3K27me3_signal/all_in_one.matrix",skip=1)
+metagene[1:10,1:10]
+
+system(paste0("/usr/local/anaconda3/bin/plotHeatmap    -m ~/snakemake/integration/metagene/H3K4me3_peaks_H3K27me3_signal/all_in_one.matrix", 
+                                                     " -o ../FigureS4_src/metagene_K4me3_peaks_K27me3_signal.pdf",
+                                                   #  " --sortRegions no",
+                                                     " --zMin 1",
+                                                     " --zMax 20",
+                                                     " --colorList white,green",
+                                                     " --refPointLabel peak",
+                                                     " --heatmapWidth 10",
+                                                     " --heatmapHeight 50"))
+  
+```
+
+# Rad21 H3K27ac integration
+
+```{r}
+integrated <- readRDS("~/snakemake/figures_paper/Rad21/integration/integrated.Rds")
+
+
+# Change misannotated OEC for vascular and intermediate for OEC
+integrated <- SetIdent(integrated,cells = WhichCells(integrated[,integrated$orig.ident=='Rad21'],idents="OEC"),value = "Vascular")
+integrated <- SetIdent(integrated,cells = WhichCells(integrated[,integrated$orig.ident=='Rad21'],idents="intermediate"),value = "OEC")
+
+# Replace dummy h3k27ac clusters with final clusetering
+brain.h3k27ac.clusters <- readRDS("~/snakemake/figures_paper/H3K27ac/clustering_1/01.clustering_final_brain.Rds")@active.ident
+integrated$cell_type                                      <- factor(integrated@active.ident,levels = unique(c(levels(integrated@active.ident),levels(brain.h3k27ac.clusters))))
+integrated$cell_type[integrated$orig.ident == 'H3K27ac']  <- brain.h3k27ac.clusters[colnames(integrated[,integrated$orig.ident == 'H3K27ac'])]
+integrated$cell_type[integrated$cell_type  == "VLMC"]     <- "Vascular"
+
+integrated$cell_type <- factor(integrated$cell_type,levels=c("Astrocytes","mOL","OEC","Vascular","OPC"))
+
+rad21.colors         <- scales::hue_pal()(5)
+names(rad21.colors)  <- c("Astrocytes","mOL","OEC","Vascular","OPC") 
+
+p1 <- AugmentPlot(DimPlot(integrated[,integrated$orig.ident == "H3K27ac"],group.by='cell_type',pt.size=1) + NoLegend() + theme(text = element_text(face = 'bold',size = 26)))
+p2 <- AugmentPlot(DimPlot(integrated[,integrated$orig.ident == "Rad21"],group.by='cell_type',pt.size=1,cols = rad21.colors) + NoLegend() + theme(text = element_text(face = 'bold',size = 26)))
+
+p1+p2
+
+ggsave(plot = p1+p2,filename = "../FigureS4_src/UMAP_Rad21_integration.pdf",width=16,height=8)
+
+```
+
+# Olig2 co-embed
+```{r}
+rm(list=ls())
+
+integrated <- readRDS("~/snakemake/figures_paper/Olig2//integration/integrated.Rds")
+
+# Change colors
+
+cluster.colors        <- scales::hue_pal()(5)
+names(cluster.colors) <- c("Astrocytes","mOL","OEC","VLMC","OPC")
+
+
+p1 <- AugmentPlot(DimPlot(integrated[,integrated$orig.ident == "H3K27ac"],group.by='cell_type',cols = cluster.colors,pt.size=1)+ NoLegend() + theme(text = element_text(face = 'bold',size = 26)))
+p2 <- AugmentPlot(DimPlot(integrated[,integrated$orig.ident == "Olig2"],pt.size=1,cols=cluster.colors,group.by='cell_type') + NoLegend() + theme(text = element_text(face = 'bold',size = 26)) )
+
+
+ggsave(plot = p1+p2,filename = "../FigureS4_src/UMAP_Olig2_integration.pdf",width=16,height=8)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

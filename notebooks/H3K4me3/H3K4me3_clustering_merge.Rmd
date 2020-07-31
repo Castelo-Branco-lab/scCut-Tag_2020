@@ -97,7 +97,7 @@ brain.merged <- RunUMAP(
   brain.merged <- FindNeighbors(
     object = brain.merged,
     reduction = 'lsi',
-    dims = 2:40
+    dims = 2:80
   )
   brain.merged <- FindClusters(
     object = brain.merged,
@@ -203,7 +203,7 @@ brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
                                     '3' = 'VLMC',
                                     '4' = 'Neurons_1',
                                     '5' = 'Neurons_2',
-                                    '7' = 'OPC_2',
+                                    '7' = 'OPC',
                                     '8' = 'OEC',
                                     '9' = 'Microglia',
                                     '10' = 'Neurons_3')

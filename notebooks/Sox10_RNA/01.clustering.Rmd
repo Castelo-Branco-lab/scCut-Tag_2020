@@ -4,8 +4,8 @@ output:
   html_document:
     df_print: paged
 params:
-  config: ""
-  out_prefix: ""
+  config: "../../config/config.yaml"
+  out_prefix: "~/mount/CT/git_test/results/"
 ---
 
 ```{r libraries}
@@ -58,7 +58,7 @@ plot2 <- FeatureScatter(brain, feature1 = "nCount_RNA", feature2 = "nFeature_RNA
 plot1 + plot2
 ```
 
-```{r subset_and_normalize}
+```{r subset_and_normalize,fig.width=8,fig.height=8}
 brain <- subset(brain, subset = nFeature_RNA > 200 & percent.mt < 15)
 brain <- NormalizeData(brain, normalization.method = "LogNormalize", scale.factor = 10000)
 
@@ -67,7 +67,8 @@ top10 <- head(VariableFeatures(brain), 10)
 
 plot1 <- VariableFeaturePlot(brain)
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
-plot1 + plot2
+plot1 
+plot2
 ```
 
 ```{r scale}
@@ -102,7 +103,7 @@ DimPlot(brain, reduction = "umap",label=TRUE)
 
 
 ```{r FindMarkers}
-markers <- FindAllMarkers(brain, min.pct = 0.4)
+markers <- FindAllMarkers(brain, min.pct = 0.3)
 
 top10 <- markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
 p1 <- DoHeatmap(brain, features = top10$gene) + NoLegend()
@@ -149,7 +150,7 @@ DimPlot(brain.GFP,label=TRUE,pt.size=0.2)
 ```
 
 ```{r findMarkers}
-markers.GFP <- FindAllMarkers(brain.GFP, min.pct = 0.2)
+markers.GFP <- FindAllMarkers(brain.GFP, min.pct = 0.3)
 
 top10 <- markers.GFP %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)
 p1 <- DoHeatmap(brain.GFP, features = top10$gene) + NoLegend()

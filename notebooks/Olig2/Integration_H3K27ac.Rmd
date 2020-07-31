@@ -90,7 +90,7 @@ p4 <- DimPlot(integrated[,integrated$antibody == "H3K27ac"], pt.size = 0.2, labe
 p5 <- DimPlot(integrated[,integrated$antibody == "Olig2"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("Olig2") + NoLegend() + scale_color_manual(values = unname(colors[c(1,6)]))
   
 
-p3
+p3w
 p4
 p5
 p4+ p5

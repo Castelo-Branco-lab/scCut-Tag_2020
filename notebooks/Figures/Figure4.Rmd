@@ -1,0 +1,209 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(ggthemes)
+rm(list=ls())
+```
+
+```{r}
+# if(dir.exists("../Figure4_src/")) {unlink("../Figure4_src",recursive = TRUE)}
+dir.create("../Figure4_src")
+```
+
+
+```{r}
+brain.olig2    <- readRDS(file="~/snakemake/figures_paper/Olig2/clustering_1/01.clustering_final_brain.Rds")
+brain.rad21    <- readRDS(file="~/snakemake/figures_paper/Rad21/clustering_1/01.clustering_final_brain.Rds")
+brain.h3k27me3 <- readRDS(file="~/snakemake/figures_paper/H3K27me3/clustering_1/01.clustering_final_brain.Rds")
+```
+
+```{r}
+reads_df <- rbind(data.frame('unique_reads'=brain.olig2$logUMI),
+                  data.frame('unique_reads'=brain.rad21$logUMI),
+                  data.frame('unique_reads'=brain.h3k27me3$logUMI))
+
+reads_df$sample <- c(rep('Olig2',dim(brain.olig2)[2]),
+                     rep("Rad21",dim(brain.rad21)[2]),
+                     rep("H3K27me3",dim(brain.h3k27me3)[2]))
+
+ggplot(data=reads_df)+ geom_boxplot(aes(x=sample,y=unique_reads,fill=sample),outlier.shape = NA) + theme_few()
+
+median(10^brain.olig2$logUMI)
+median(10^brain.rad21$logUMI)
+```
+
+
+```{r}
+brain.rad21    <- readRDS(file="~/snakemake/figures_paper/Rad21/clustering_1/01.clustering_final_brain.Rds")
+brain.rad21 <- RenameIdents(brain.rad21,c('intermediate'='VLMC'))
+
+
+cluster.colors        <- scales::hue_pal()(5)
+names(cluster.colors) <- c("Astrocytes","mOL","OEC","VLMC","OPC")
+
+
+DimPlot(brain.olig2,cols = cluster.colors,pt.size = 1) + NoLegend() + NoAxes()
+ggsave("../Figure4_src/Olig2_UMAP.pdf",width=8,height=8)
+
+
+DimPlot(brain.rad21,cols = cluster.colors,pt.size = 1) + NoLegend() + NoAxes()
+ggsave("../Figure4_src/Rad21_UMAP.pdf",width=8,height=8)
+```
+
+
+```{r}
+p1 <- AugmentPlot(FeaturePlot(brain.olig2,'logUMI',min.cutoff = 1.5,max.cutoff = 3,pt.size = 1.5) + scale_color_viridis_c(option = "B") + ggtitle('')+ theme(text=element_text(face = 'bold',size=26)) + NoAxes())
+
+p2 <- AugmentPlot(FeaturePlot(brain.rad21,'logUMI',min.cutoff = 1.5,max.cutoff = 3,pt.size = 1.5) + scale_color_viridis_c(option = "B") + ggtitle('')+ theme(text=element_text(face = 'bold',size=26)) + NoAxes())
+
+p1_scale <- FeaturePlot(brain.olig2,'logUMI',min.cutoff = 1.5,max.cutoff = 3,pt.size = 1.5) + scale_color_viridis_c(option = "B") + ggtitle('')+ theme(text=element_text(face = 'bold',size=26)) + NoAxes()
+  
+p2_scale <- FeaturePlot(brain.rad21,'logUMI',min.cutoff = 1.5,max.cutoff = 3,pt.size = 1.5) + scale_color_viridis_c(option = "B") + ggtitle('')+ theme(text=element_text(face = 'bold',size=26)) + NoAxes()
+  
+  
+p1
+ggsave(plot = p1,filename = '../Figure4_src/Olig2_logUMI.png',width=8,height=8)
+ggsave(plot = p1_scale,filename = '../Figure4_src/Olig2_logUMI_scale.png',width=8,height=8)
+
+p2
+ggsave(plot = p2,filename = '../Figure4_src/Rad21_logUMI.png',width=8,height=8)
+ggsave(plot = p2_scale,filename = '../Figure4_src/Rad21_logUMI_scale.png',width=8,height=8)
+
+```
+
+```{r,fig.width=8,fig.height=8}
+rm(list=ls())
+
+cluster.colors        <- scales::hue_pal()(8)
+names(cluster.colors) <- c("Astrocytes","Oligodendrocytes","VEC","OEC","VLMC","Pericytes","COP-NFOL","OPC")
+
+brain.RNA <- readRDS("~/snakemake/Sox10_RNA/Sox10_scRNA_GFP.Rds")
+levels(brain.RNA@active.ident)
+
+brain.RNA@active.ident <- factor(brain.RNA@active.ident,levels=levels(brain.RNA@active.ident)[c(6,8,4,2,3,5,7,1)])
+
+p1 <- VlnPlot(brain.RNA,features = 'Olig2',pt.size = 0,cols = cluster.colors) + theme(text=element_text(face='bold',size=36),axis.text.x = element_text(face='bold',size=36)) + NoLegend() + ggtitle('') + xlab('')
+p1
+ggsave(plot = p1,filename = '../Figure4_src/Olig2_RNA_expression.pdf',width=8,height = 8)
+
+```
+
+
+# Markers
+
+```{r}
+library(Gviz)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(GenomicFeatures)
+
+rm(list=ls())
+txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
+
+brain.Rad21 <- readRDS(file="~/snakemake/figures_paper/Rad21/clustering_1/01.clustering_final_brain.Rds")
+
+bw.files       <- list.files("~/snakemake/figures_paper/Rad21/clustering_1/bigwig/",full.names = TRUE)
+bw.files.K27ac <- list.files("~/snakemake/figures_paper/H3K27ac/clustering_1/bigwig/",full.names = TRUE)
+
+
+
+
+
+```
+
+
+
+```{r,fig.width=4,fig.height=4}
+
+
+bw.files       <- bw.files[c(1,3,2)]
+bw.files.K27ac <- bw.files.K27ac[c(1,2,3,5)]
+
+samples  <- basename(gsub(".bw","",gsub("cluster_","",bw.files)))
+
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
+marker.regions <- c(
+                    StringToGRanges("chr11:112777525-112828618 ",sep = c(":","-")),              # Sox9
+                     StringToGRanges("chr18:82522111-82591290",sep = c(":","-")),              # Mbp
+                    StringToGRanges("chr10:30817425-30862096",sep = c(":","-")))               # Hey2
+                    #StringToGRanges("chr3:107590843-107628160",sep = c(":","-")),             # Alx3
+                    #StringToGRanges("chr1:94018857-94036377",sep=c(":","-")))                 # Neu4
+
+
+
+to.plot.ls <- lapply(bw.ls,function(x){
+  x <- subsetByOverlaps(x,marker.regions[1])
+  x
+})
+
+
+
+colors= scales::hue_pal()(5)
+
+
+p <- lapply(seq(marker.regions),function(y){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /20) * 20)
+  bw.tracks <- lapply(seq(to.plot.ls),function(x){
+    track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
+                       from = start(marker.regions[y]), to = end(marker.regions[y]),
+                       type="polygon",showTitle=FALSE,col.axis="black",
+                       background.title="transparent",col.baseline="black",
+                       col.mountain="transparent",fill.mountain=c(colors[x],colors[x]),ylim=ylimits)
+    track
+  })
+  
+  myAxisTrack <- GenomeAxisTrack(col="black")
+  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                             stacking = 'full',col='black',fill='red')
+  return(c(myAxisTrack,bw.tracks,grtrack))
+})
+
+pdf(file = "../Figure4_src/markers_pseudobulk_Rad21.pdf",width = 2,height=4)
+sapply(seq(marker.regions),function(x){
+  plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(bw.files)),1))
+})
+dev.off()
+
+
+
+
+```
+
+
+# ChromVAR plots
+
+```{r}
+load("~/snakemake/figures_paper/Olig2/chromVAR/chromVAR.Rdata")
+
+# Olig2
+p1 <- AugmentPlot(FeaturePlot(brain,features = "MA0678.1",min.cutoff=-2,max.cutoff = 2,cols = c('grey','purple3'),pt.size=3) + ggtitle("Olig2") + NoAxes())
+p1
+
+# GC-box
+
+p2 <- AugmentPlot(FeaturePlot(brain,features = "MA0685.1",min.cutoff=-2,max.cutoff = 2,cols = c('grey','purple3'),pt.size=3) + ggtitle("GC-box")  + NoAxes())
+p2
+
+# CCAAT motif - e.g. NFYA
+p3 <- AugmentPlot(FeaturePlot(brain,features = "MA0060.3",min.cutoff=-2,max.cutoff = 2,cols = c('grey','purple3'),pt.size=3) + ggtitle("CCAAT box") + NoAxes())
+p3
+
+p4 <- AugmentPlot(FeaturePlot(brain,features = "MA0139.1",min.cutoff=-2,max.cutoff = 2,cols = c('grey','purple3'),pt.size=3) + ggtitle("Ctcf") + NoAxes())
+p4
+
+
+ggsave(plot = p1+p2+p3+p4,filename = "../Figure4_src/motifs_enrichment.pdf",width=6,height=6)
+
+
+```
+
+
+

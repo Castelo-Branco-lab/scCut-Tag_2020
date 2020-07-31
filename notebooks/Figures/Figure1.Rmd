@@ -1,0 +1,555 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: '~/mount/CT/git_test/results/'  
+---
+
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(pheatmap)
+library(GenomicRanges)
+library(EnsDb.Mmusculus.v79)
+library(dplyr)
+
+set.seed(2020)
+```
+
+# Take care of the directories
+
+```{r}
+dir.create(paste0(params$out_prefix,'Figures/figure1_src'))
+```
+
+
+
+
+# Boxplot meta - Figure 1c
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+
+UMI.ls <- lapply(samples,function(x){
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  return(brain$logUMI)
+})
+
+UMI.ls <-lapply(UMI.ls,function(x){
+ x <- as.data.frame(x)
+ colnames(x) <- "UMI"
+ name <-strsplit(rownames(x)[1],'_')[[1]][1]
+ x$sample <- name
+ x
+})
+
+UMI <- do.call('rbind',UMI.ls)
+UMI$sample <- factor(UMI$sample,levels=samples)
+
+
+p1 <- ggplot(data=UMI,aes(x=sample,y=UMI)) + 
+  geom_violin(aes(fill=sample)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  theme_few() + 
+  theme(axis.text.x  = element_text(angle=45,hjust = 1,size = 20,face = 'bold'),
+        axis.title.y = element_text(size=20,face = 'bold')) +
+  scale_fill_brewer(palette = 'Set1') + 
+  NoLegend() + 
+  ylab("Unique reads\nper cell (log10)") + xlab("")
+ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/UMI_boxplot.pdf'),plot = p1,width=8,height = 4)
+
+p1
+
+UMI.summary <- aggregate(UMI$UMI,by=list(UMI$sample),FUN=median)
+UMI.summary$x <- 10^UMI.summary$x
+print(UMI.summary)
+```
+
+
+
+
+
+# Boxplot FrIP -Figure 1d
+
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+
+FRIP.ls <- lapply(samples,function(x){
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  return(brain$peak_ratio_MB)
+})
+
+FRIP.ls <-lapply(FRIP.ls,function(x){
+ x <- as.data.frame(x)
+ colnames(x) <- "FriP"
+ name <-strsplit(rownames(x)[1],'_')[[1]][1]
+ x$sample <- name
+ x
+})
+
+FRIP       <- do.call('rbind',FRIP.ls)
+FRIP$sample <- factor(FRIP$sample,levels=samples)
+
+p2 <- ggplot(data=FRIP,aes(x=sample,y=FriP)) + 
+  geom_violin(aes(fill=sample)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  xlab("") +
+  theme_few() + 
+  theme(axis.text.x  = element_text(angle=45,hjust = 1,size = 20,face = 'bold'),
+        axis.title.y = element_text(size=20,face = 'bold')) + 
+  scale_fill_brewer(palette = 'Set1') + NoLegend() +
+  ylab("Fragments in\npeaks [%]")
+ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/FrIP_boxplot.pdf'),plot = p2,width=8,height = 4)
+
+p2
+
+FRIP.summary <- aggregate(FRIP$FriP,by=list(FRIP$sample),FUN=median)
+FRIP.summary$x <- FRIP.summary$x *100
+print(FRIP.summary)
+```
+
+# Nucleosome pattern - Figure 1e
+
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+
+f.ls <- lapply(samples,function(x){
+  #brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  #brain <- SetFragments(brain,file = paste0(params$out_prefix,x,'_N1/outs/fragments.tsv.gz'))
+  f <- rtracklayer::import(paste0(params$out_prefix,x,'_N1/outs/fragments.tsv.gz'),format = 'bed')
+  return(width(f))
+})
+
+
+f.width <- as.data.frame(do.call(cbind,f.ls))
+colnames(f.width) = samples
+
+f.width.long <- reshape::melt(f.width)
+
+p3 <- ggplot(data=f.width.long,aes(x=value,fill=variable)) + geom_histogram(binwidth = 5) + coord_cartesian(xlim=c(0,1000)) + theme_bw() + scale_fill_brewer(palette = 'Set1')  + facet_wrap(~variable) + NoLegend() + theme(axis.title.x  = element_text(size = 20,face = 'bold'),
+        axis.title.y = element_text(size=20,face = 'bold'),strip.text.x = element_text(size=16)) + xlab("size [bp]") + ylab("count")
+
+p3
+ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/Nucleosome_histogram.pdf'),plot = p3,width=4,height = 4)
+
+```
+
+
+
+
+# H3K4me3
+```{r}
+
+x = "H3K4me3"
+brain.H3K4me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("OPC_2"="OPC"))
+
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Reorder seurat object
+brain.H3K4me3@active.ident <- factor(brain.H3K4me3@active.ident,levels = clusters_order)
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+
+p1 <- DimPlot(brain.H3K4me3,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)
+p1
+ggsave(filename = paste0(params$out_prefix,"Figures/figure1_src/H3K4me3_UMAP.png"),
+       plot = p1,width = 8,height = 8)
+
+
+brain.H3K4me3$cell_type <- brain.H3K4me3@active.ident
+
+ggplot(data=brain.H3K4me3@meta.data,aes(x=cell_type,y=logUMI)) + 
+  geom_violin(aes(fill=cell_type)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  ggthemes::theme_few()
+
+```
+
+# H3K27me3
+
+```{r}
+x = "H3K27me3"
+brain.H3K27me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+brain.H3K27me3 <- RenameIdents(brain.H3K27me3,c("Exc_neurons" = "Neurons_1","Inh_neurons" = "Neurons_2", "micoglia" = "Microglia","VLMCs"="VLMC"))
+
+# Reorder seurat object
+brain.H3K27me3@active.ident <- factor(brain.H3K27me3@active.ident,levels = clusters_order)
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+p1 <- DimPlot(brain.H3K27me3,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)
+p1
+ggsave(filename = paste0(params$out_prefix,"Figures/figure1_src/H3K27me3_UMAP.png"),
+       plot = p1,width = 8,height = 8)
+
+
+brain.H3K27me3$cell_type <- brain.H3K27me3@active.ident
+
+ggplot(data=brain.H3K27me3@meta.data,aes(x=cell_type,y=logUMI)) + 
+  geom_violin(aes(fill=cell_type)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  theme_few()
+ 
+
+```
+
+ 
+
+
+# H3K27ac
+```{r}
+x = "H3K27ac"
+brain.H3K27ac <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+p1 <- DimPlot(brain.H3K27ac,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)
+p1
+ggsave(filename = paste0(params$out_prefix,"Figures/figure1_src/H3K27ac_UMAP.png"),
+       plot = p1,width = 8,height = 8)
+
+
+
+
+brain.H3K27ac$cell_type <- brain.H3K27ac@active.ident
+ggplot(data=brain.H3K27ac@meta.data,aes(x=cell_type,y=logUMI)) + 
+  geom_violin(aes(fill=cell_type)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  ggthemes::theme_few()
+
+```
+
+# H3K36me3
+
+```{r}
+x = "H3K36me3"
+brain.H3K36me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+brain.H3K36me3 <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+p1 <- DimPlot(brain.H3K36me3,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)
+p1
+ggsave(filename = paste0(params$out_prefix,"Figures/figure1_src/H3K36me3_UMAP.png"),
+       plot = p1,width = 8,height = 8)
+
+
+brain.H3K36me3$cell_type <- brain.H3K36me3@active.ident
+
+ggplot(data=brain.H3K36me3@meta.data,aes(x=cell_type,y=logUMI)) + 
+  geom_violin(aes(fill=cell_type)) + 
+  geom_boxplot(width=0.1,outlier.shape = NA) +
+  ggthemes::theme_few()
+
+
+```
+
+
+```{r}
+
+DoHeatmapMB <- function(object, cells=colnames(object),genes = head(rownames(object),100),slot = "counts",assay=DefaultAssay(object),annotation_row,annotation_col,...){
+  
+  heatmap.mat <- GetAssayData(object = object[,colnames(object) %in% cells], slot,assay = assay)
+  heatmap.mat <- as.matrix(heatmap.mat[rownames(heatmap.mat) %in% genes,])
+  
+  heatmap.mat <- heatmap.mat[rownames(annotation_row),rownames(annotation_col)] 
+
+  pheatmap::pheatmap(heatmap.mat,
+                     cluster_cols = FALSE, 
+                     cluster_rows = FALSE,
+                     color = colorRampPalette(colors = c("midnightblue","white","red3"))(256),
+                     show_rownames = FALSE,
+                     show_colnames = FALSE,
+                     labels_col = "",labels_row = "",
+                     annotation_row = annotation_row,
+                     annotation_col = annotation_col,...)
+}
+```
+
+```{r,fig.width=10,fig.height=10}
+# Read data
+x = "H3K4me3"
+brain.H3K4me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("OPC_2"="OPC","Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
+DefaultAssay(brain.H3K4me3) <- 'bins_5000'
+
+markers         <- read.csv2(paste0(params$out_prefix,x,"/clustering/markers.csv"),row.names = 1)
+markers$cluster <- plyr::revalue(markers$cluster,c("OPC_2"="OPC","Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
+
+clusters_order_heatmap      <- clusters_order
+clusters_order_heatmap[4:6] <- gsub("rons","",clusters_order_heatmap[4:6])
+
+# Get top markers
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0 & p_val_adj < 0.05) %>% top_n(100, wt=-log(p_val))
+top.markers <- top.markers[which(!top.markers$gene %in% names(table(top.markers$gene)[table(top.markers$gene) > 1])),] # remove non-unique
+
+# Reorder markers
+top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order_heatmap)
+top.markers         <- top.markers[order(top.markers$cluster),]
+
+# Reorder cells
+Idents(brain.H3K4me3) <- factor(as.character(Idents(brain.H3K4me3)),levels=clusters_order_heatmap)
+
+# create Annotation panels
+row_annotation.df           <- data.frame(markers=top.markers$cluster)
+rownames(row_annotation.df) <- top.markers$gene
+  
+col_annotation.df           <- data.frame(clusters=Idents(brain.H3K4me3))
+col_annotation.df$GFP       <- brain.H3K4me3$GFP
+col_annotation.df$Age       <- brain.H3K4me3$Age 
+  
+
+
+# Colors for annotation panels
+CTcolors_heatmap         <- CTcolors
+names(CTcolors_heatmap)  <- clusters_order_heatmap
+
+clusterColors                <- rep(list(CTcolors_heatmap),2)
+names(clusterColors)         <- c("clusters","markers")
+
+clusterColors$GFP            <- brewer.pal(n = 9,name = "Set1")[3:4]
+names(clusterColors$GFP)     <- c("GFP+","GFP-")
+  
+clusterColors$Age            <- brewer.pal(n = 9,name = "Set1")[1:2]
+names(clusterColors$Age)     <- c("P15","P25")
+
+
+# Filter which cells to plot
+fraction = 0.2
+cells  = sample(colnames(brain.H3K4me3),length(colnames(brain.H3K4me3)) * fraction)
+col_annotation.df <- col_annotation.df[as.character(cells),]
+col_annotation.df <- col_annotation.df[do.call(order,col_annotation.df),]
+
+DoHeatmapMB(object = brain.H3K4me3,
+            cells = cells,
+            genes = top.markers$gene,
+            clusterColors = clusterColors,
+            slot="data",
+            annotation_colors = clusterColors,
+            annotation_row = row_annotation.df,
+            annotation_col = col_annotation.df,
+            filename = paste0(params$out_prefix,"Figures/figure1_src/H3K4me3_heatmap.png"),
+            fontsize = 14,width=12,height=10)
+
+
+
+```
+
+
+```{r,fig.width=4,fig.height=4}
+library(Gviz)
+library(RColorBrewer)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(GenomicFeatures)
+
+txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
+
+bw.files <- list.files("~/snakemake/figures_paper/H3K4me3/clustering_1/bigwig/")
+bw.files <- bw.files[c(1,2,3,5,4)]
+
+samples  <- gsub(".bw","",gsub("cluster_","",bw.files))
+
+bw.files <- paste0("~/snakemake/figures_paper/H3K4me3/clustering_1/bigwig/",bw.files)
+
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
+marker.regions <- c(
+                    StringToGRanges("chr10:84743128-84770673 ",sep = c(":","-")),              # Rfx4
+ #                   StringToGRanges("chr10:84544797-85035996",sep = c(":","-")),              # Rfx4 wide
+                    StringToGRanges("chr17:37003063-37027942",sep = c(":","-")),              # Mog
+                    StringToGRanges("chr3:87962494-87990625",sep = c(":","-")),               # Nes
+                    StringToGRanges("chr3:107590843-107628160",sep = c(":","-")),             # Alx3
+                    StringToGRanges("chr1:94018857-94036377",sep=c(":","-")))                 # Neu4
+
+
+
+to.plot.ls <- to.plot.ls <- lapply(bw.ls,function(x){
+  x <- subsetByOverlaps(x,marker.regions[1])
+  x
+})
+
+
+
+colors= scales::hue_pal()(5)
+
+
+p <- lapply(seq(marker.regions),function(y){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /100) * 100)
+  bw.tracks <- lapply(seq(to.plot.ls),function(x){
+    track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
+                       from = start(marker.regions[y]), to = end(marker.regions[y]),
+                       type="polygon",showTitle=FALSE,col.axis="black",
+                       background.title="transparent",col.baseline="black",
+                       col.mountain="transparent",fill.mountain=c(colors[x],colors[x]),ylim=ylimits)
+    track
+  })
+  
+  myAxisTrack <- GenomeAxisTrack(col="black")
+  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                             stacking = 'full',col='black',fill='red')
+  return(c(myAxisTrack,bw.tracks,grtrack))
+})
+
+pdf(file = "../Figure1_src/markers_pseudobulk_H3K4me3.pdf",width = 2,height=4)
+sapply(seq(marker.regions),function(x){
+  plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions)),1))
+})
+dev.off()
+
+
+
+
+```
+
+
+```{r,fig.width=4,fig.height=4}
+library(Gviz)
+library(RColorBrewer)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(GenomicFeatures)
+
+txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
+
+bw.files <- list.files("~/snakemake/figures_paper/H3K27ac/clustering_1/bigwig/")
+bw.files <- bw.files[c(1,2,3,5,4)]
+
+samples  <- gsub(".bw","",gsub("cluster_","",bw.files))
+
+bw.files <- paste0("~/snakemake/figures_paper/H3K27ac/clustering_1/bigwig/",bw.files)
+
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
+marker.regions <- c(
+                    StringToGRanges("chr10:84743128-84770673 ",sep = c(":","-")),              # Rfx4
+ #                   StringToGRanges("chr10:84544797-85035996",sep = c(":","-")),              # Rfx4 wide
+                    StringToGRanges("chr17:37003063-37027942",sep = c(":","-")),              # Mog
+                    StringToGRanges("chr3:87962494-87990625",sep = c(":","-")),               # Nes
+                    StringToGRanges("chr3:107590843-107628160",sep = c(":","-")),             # Alx3
+                    StringToGRanges("chr1:94018857-94036377",sep=c(":","-")))                 # Neu4
+
+
+
+to.plot.ls <- to.plot.ls <- lapply(bw.ls,function(x){
+  x <- subsetByOverlaps(x,marker.regions[1])
+  x
+})
+
+
+
+colors= scales::hue_pal()(5)
+
+
+p <- lapply(seq(marker.regions),function(y){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /10) * 10 )
+  bw.tracks <- lapply(seq(to.plot.ls),function(x){
+    track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
+                       from = start(marker.regions[y]), to = end(marker.regions[y]),
+                       type="polygon",showTitle=FALSE,col.axis="black",
+                       background.title="transparent",col.baseline="black",
+                       col.mountain="transparent",fill.mountain=c(colors[x],colors[x]),ylim=ylimits)
+    track
+  })
+  
+  myAxisTrack <- GenomeAxisTrack(col="black")
+  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                             stacking = 'full',col='black',fill='red')
+  return(c(myAxisTrack,bw.tracks,grtrack))
+})
+
+pdf(file = "../Figure1_src/markers_pseudobulk_H3K27ac.pdf",width = 2,height=4)
+sapply(seq(marker.regions),function(x){
+  plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions)),1))
+})
+dev.off()
+
+
+
+
+```
+
+
+
+
+# scRNA-seq Sox10 GFP+
+
+```{r,eval=FALSE}
+
+brain.RNA <- readRDS(file="~/snakemake/Sox10_RNA/Sox10_scRNA_GFP.Rds")
+plot(1:8,col=scales::hue_pal()(8),pch=19,cex=3)
+
+colors = scales::hue_pal()(8)
+p1 <- DimPlot(brain.RNA,label=TRUE)  + scale_color_manual(values = c("Astrocytes" = colors[1],
+                                                               "Oligodendrocytes" = colors[2],
+                                                                "OEC" = colors[4],
+                                                                "VLMC" = colors[5],
+                                                                "OPC" = colors[8],
+                                                                "COP-NFOL" = colors[7],
+                                                                "Pericytes" = colors[3],
+                                                                "VEC" = colors[6]))
+
+ggsave(filename = "~/Dropbox/scCT_paper/Figures/Figure1_src/Fig1_RNA_UMAP.pdf",
+       plot = AugmentPlot(p1),width=8,height=8)
+p1
+```
+
+
+######################## Figure S1
+
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+brain.ls <- lapply(samples,function(x){
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  brain  
+})
+
+p.GFP <- lapply(brain.ls,function(x){
+  DimPlot(x,group.by="GFP",pt.size=0.01) + theme(legend.position = 'bottom') + scale_color_manual(values = setNames(brewer.pal(n = 9,name = 'Set1')[c(4,3)],c("GFP-","GFP+"))) + ggtitle(unique(x$antibody))
+})
+
+p.Age <- lapply(brain.ls,function(x){
+  DimPlot(x,group.by="Age",pt.size=0.01) + theme(legend.position = 'bottom') + scale_color_manual(values = brewer.pal(n = 9,name = 'Set1')[c(1,2)]) + ggtitle(unique(x$antibody))
+})
+
+p.rep <- lapply(brain.ls,function(x){
+  DimPlot(x,group.by="orig.ident",pt.size=0.01) + theme(legend.position = 'bottom') + scale_color_manual(values = scales::hue_pal()(4)[c(3,1,2,4)]) + ggtitle(unique(x$antibody))
+})
+
+p <- c(p.GFP,p.Age,p.rep)
+p <- p[c(1,5,9,2,6,10,3,7,11,4,8,12)]
+
+p <- do.call(grid.arrange,c(p,"ncol"=3))
+ggsave(p,filename =  paste0(params$out_prefix,"Figures/figureS1_src/H3K4me3_heatmap.png"),width=16,height=16)
+```
+
+
+
+
+
+
+
+
+
+
