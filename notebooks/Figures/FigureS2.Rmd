@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: '~/mount/CT/git_test/results/'  
+
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(pheatmap)
+
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+dir.create( paste0(params$out_prefix,'Figures/figureS2_src/'))
+```
+
+```{r, fig.width=2,fig.height=2}
+brain.ls <- lapply(samples,function(x){
+  #file.exists(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  return(brain)
+})
+
+nfeature.ls <- lapply(brain.ls,function(x){
+  x@meta.data[,grep('nFeature_bins_',colnames(x@meta.data))]
+})
+
+names(nfeature.ls) <- samples
+
+nfeature.ls <- lapply(seq(nfeature.ls),function(x){
+  out        <- data.frame('nfeatures' = nfeature.ls[[x]])
+  out$sample <- names(nfeature.ls)[x]
+  out
+})
+
+
+nfeature.df <- do.call(rbind,nfeature.ls)
+nfeature.df$sample <- factor(nfeature.df$sample,levels=samples)
+
+
+p <- ggplot(data=nfeature.df) + geom_histogram(aes(x=nfeatures,fill=sample),binwidth=40) + facet_wrap(~sample) + theme_bw() + coord_cartesian(xlim=c(0,1000)) + scale_fill_brewer(palette = "Set1") + NoLegend() + theme(text= element_text(size=24,face = 'bold'),axis.text.x = element_text(size=16))
+
+print(p)
+
+ggsave(filename = paste0(params$out_prefix,'Figures/figureS2_src/nFeatures.pdf'),plot = p,width=6,height = 6)
+
+```
+
+
+# GO TERMS
+
+
+```{r,fig.width=4,fig.height=4}
+GO_matrix <- read.csv2(file=paste0(params$out_prefix,'H3K4me3/GO_terms/GO_matrix_markers.csv'),row.names = 1,stringsAsFactors = FALSE)
+
+
+filterRows <- unique(grep("myelin|astro|oligo|axon|vascul|glia| stem",rownames(GO_matrix)))
+
+heatmap.colors <- colorRampPalette(colors = c("red","white","blue"))(20)
+pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+pdf(file = "../FigureS3_src/GO_terms_heatmap.pdf")
+pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+

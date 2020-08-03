@@ -115,7 +115,54 @@ DimPlot(brain.merged[,brain.merged@active.ident %in% 0:10],label=TRUE,pt.size=0.
 
 ```
 
+############################ TODO fix
+```{r peaks_dimreduce}
+peaks <- rtracklayer::import(paste0(params$out_prefix,'/merged/',params$antibody,'/macs/broad/',params$antibody,'_peaks.broadPeak'))
+peaks <- subsetByOverlaps(x = peaks,ranges =  blacklist_mm10,invert = TRUE)
 
+fragments <- paste0(params$out_prefix,unique(brain.merged$orig.ident),'/outs/fragments.tsv.gz')
+names(fragments) <- unique(brain.merged$orig.ident)
+
+
+peak.matrix.ls <- lapply(names(fragments),function(x){
+  FeatureMatrix(fragments = fragments[x],features = peaks,cells = colnames(brain.merged[,brain.merged$orig.ident == x]))
+})
+
+rows.summary <- table(unlist(lapply(peak.matrix.ls,rownames))) 
+common.rows  <- names(rows.summary[rows.summary == length(peak.matrix.ls)])
+
+peak.matrix.ls<-  lapply(peak.matrix.ls,function(x){
+  x[common.rows,]
+})
+
+peak.matrix.merged <- do.call(cbind,peak.matrix.ls)
+brain.merged[['peaks']] <- CreateAssayObject(counts = peak.matrix.merged)
+
+
+assay <- 'peaks'
+DefaultAssay(brain.merged) <- assay
+brain.merged <- RunTFIDF(brain.merged)
+brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q0')
+  
+brain.merged.peaks <- RunSVD(
+  object = brain.merged,
+  assay = assay,
+  reduction.key = 'LSI_',
+  reduction.name = 'lsi'
+)
+  
+brain.merged.peaks <- RunUMAP(
+  object = brain.merged.peaks,
+  reduction = 'lsi',
+  dims = 2:30
+)
+
+  
+DimPlot(brain.merged.peaks,label=TRUE)
+DimPlot(brain.merged.peaks,group.by='sample') + theme(legend.position = 'bottom')
+```
+
+#####################################
 
 
 ```{r plots, fig.width=12,fig.height=6}
@@ -222,7 +269,10 @@ p2
 p3
 ```
 
-```{r find_markers}
+
+
+```{r find_markers_peaks}
+DefaultAssay(brain.merged) <- 'peaks'
 brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
 markers <- FindAllMarkers(brain.merged,min.pct = 0.04,logfc.threshold = 0.1,slot = 'data')
 
@@ -233,9 +283,7 @@ markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
 markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
 saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
-write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
-write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
-write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/peaks_markers_top.csv"))
 
 ```
 
@@ -315,6 +363,29 @@ lapply(levels(top.markers$cluster),function(x){
   top.markers.x <- sort(StringToGRanges(top.markers.x$gene))
   rtracklayer::export.bed(object = top.markers.x,con = paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/markers_cluster_",x,".bed"))
 })
+```
+
+
+
+
+```{r find_markers}
+DefaultAssay(brain.merged) <- paste0('bins_',params$window)
+brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
+markers <- FindAllMarkers(brain.merged,min.pct = 0.04,logfc.threshold = 0.1,slot = 'data')
+
+markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
+#View(markers)
+
+markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
+markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
+
+#saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
+write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
+write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
+
+
+
 ```
 
 ```{r do_heatmap}

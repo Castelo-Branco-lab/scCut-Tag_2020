@@ -70,6 +70,14 @@ brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 
 ```{r filter_lowUMI}
 brain.merged  <- brain.merged[,brain.merged$logUMI > 1.8]
+brain.merged  <- brain.merged[,!brain.merged$blacklist_region_fragments >1]
+
+# Blacklist
+rows.pass             <- GRangesToString(subsetByOverlaps(x = StringToGRanges(rownames(brain.merged)),ranges = blacklist_mm10,invert = TRUE))
+bins.mat              <- brain.merged[[assay]]@counts[rownames(brain.merged) %in% rows.pass,]
+
+brain.merged[[assay]] <- CreateAssayObject(counts = bins.mat)
+
 
 ```
 
@@ -80,7 +88,7 @@ brain.merged  <- brain.merged[,brain.merged$logUMI > 1.8]
 assay = paste0("bins_",window)
 
 brain.merged <- RunTFIDF(brain.merged)
-brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q50')
+brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q5')
   
 brain.merged <- RunSVD(
   object = brain.merged,

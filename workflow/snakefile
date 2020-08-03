@@ -11,19 +11,23 @@ shell.prefix("source ~/.bashrc; conda activate " + config['general']['conda_env'
 CWD = os.getcwd()
 #print('working dir is:' + CWD)
 
+# List of samples and antibodies
 samples_list    = [x for x in config['samples']]
-samples_dict    = {x: config['samples'][x]['Antibody'] for x in config['samples'].keys()}
-
 antibody_list   = [config['samples'][x]['Antibody'] for x in config['samples'].keys()]
 
 
-# Create antibody: path to cellranger mapping for expand
-d = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+# sample: antibody hash {"H3K4me3_N1":"H3K4me3"}
+samples_dict    = {x: config['samples'][x]['Antibody'] for x in config['samples'].keys()}
+
+# antibody: sample hash {'H3K4me3': ['H3K4me3_N1', 'H3K4me3_N2', 'H3K4me3_N3', 'H3K4me3_N4']}
+antibody_dict = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
 for x in config['samples'].keys():
-   d[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
+   antibody_dict[config['samples'][x]['Antibody']].append(x)
 
-
-
+# antibody: path to cellranger hash {"H3K27ac_M1": "/data/proj/GCB_MB/CT/CT_19_001"}
+cellranger_dict = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+for x in config['samples'].keys():
+   cellranger_dict[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
 
 rule all:
   input:
@@ -36,9 +40,8 @@ rule all:
     expand("results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = list(set(antibody_list))),
 
     # Merged files accross replicates
-    expand("results/merged/{antibody}/possorted_bam.bam", antibody = ['Olig2']),                                    #list(set(antibody_list))),
     expand("results/{sample}/outs/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),
-    # expand("results/{antibody}/outs/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),  # TODO fix
+    expand("results/merged/{antibody}/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),  # TODO fix
 
     # Barcode statistics for cell selection
     expand("results/{sample}/barcode_statistics/all_barcodes.txt",sample = samples_list),
@@ -49,13 +52,19 @@ rule all:
 
     # RNA-seq clustering
     'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
+    expand(directory('results/{RNA}/marker_promoters/'),RNA=["Sten_RNA","Sox10_RNA"]),
+    
     'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
+  
 
-    # Clustering final
-    expand("results/{antibody}/clustering/01.clustering.Rds", antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2","Rad21"]), # ,antibody = antibody_list)
-    #expand("results/{antibody}/clustering/metagene/metagene.txt.gz",antibody = ['H3K27me3','H3K4me3',"H3K27ac"]),
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = ['H3K27me3','H3K4me3',"H3K27ac","H3K36me3","Olig2","Rad21"]),
+    # Clustering final Cut&Tag
+    expand("results/{antibody}/clustering/01.clustering.Rds",antibody = list(set(antibody_list))),
+
+    # Metagene plot
+    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = list(set(antibody_list))),
+    expand('results/{antibody}/metagene/metagene_{RNA}_RNA_promoters.png',antibody = list(set(antibody_list)),RNA=["Sten","Sox10"]),
+
 
     # Export bam per cluster
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
@@ -66,10 +75,13 @@ rule all:
     # integration
     'results/Olig2/integration/integrated.Rds',
 
+    # GO terms
+    'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
+
     # scATAC
     'results/scATAC_P50/clustering/clustering_scATAC.Rds',
 
-
+################## PREPROCESSING
 rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
@@ -108,14 +120,16 @@ rule run_macs_broad:
 
 rule macs_merged:
   input:
-    "results/merged/{antibody}/possorted_bam.bam"
+    lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
   output:
-    "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak"
+    "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+    "results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak"
   params:
-    macs_outdir = "results/merged/{antibody}/macs/narrow/"
+    out_narrow = "results/merged/{antibody}/macs/narrow/",
+    out_broad  = "results/merged/{antibody}/macs/broad/"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} "
-        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
+    "(macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_narrow} -q 0.05 -B --SPMR --keep-dup=1 2>&1 & "
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_broad} --broad-cutoff=0.1 --broad -q 0.05 -B --SPMR --keep-dup=1 2>&1 )"
 
 rule barcode_statistics_peaks:
     input:
@@ -130,11 +144,11 @@ rule barcode_statistics_peaks:
 
     conda: '../envs/CT_snakemake.yaml'
     shell:
-        "set +o pipefail; "
-        "(bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
-        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.broad} && "
+      #  "set +o pipefail; "
+        "bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.broad} && [[ -s {output.broad} ]] ; "
         " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
-        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.narrow} )"
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.narrow} && [[ -s {output.narrow} ]] ;"
 
 rule barcode_statistics_all:
   input:
@@ -144,13 +158,13 @@ rule barcode_statistics_all:
   params:
     scripts    = os.path.dirname(workflow.basedir) + '/scripts',
   shell:
-    " set +o pipefail; "
+    #" set +o pipefail; "
     " samtools view -f2 {input.bam}| "
-    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.all_bcd} "
+    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.all_bcd} && [[ -s {output.all_bcd} ]] "
 
 rule merge_bam:
     input:
-        lambda wildcards: [x + '/outs/possorted_bam.bam' for x in d[wildcards.antibody] ]
+        lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
     output:
         "results/merged/{antibody}/possorted_bam.bam"
     conda: '../envs/CT_snakemake.yaml'
@@ -160,14 +174,13 @@ rule merge_bam:
 
 rule merge_fragments:
     input:
-        lambda wildcards: [x + '/outs/fragments.tsv.gz' for x in d[wildcards.antibody] ]
+        lambda wildcards: ['results/' + x + '/outs/fragments.tsv.gz' for x in antibody_dict[wildcards.antibody] ]
     output:
         "results/merged/{antibody}/fragments.tsv.gz"
     conda: '../envs/CT_snakemake.yaml'
-    threads: 8
     shell:
-        "gunzip -c {input} | bgzip > {output}; "
-        "tabix index -p bed {output}" 
+        "gunzip -c {input} | sort -k1,1 -k2,2n | bgzip  > {output} && "
+        "tabix -p bed {output}" 
 
 
 rule add_barcode_fragments:
@@ -180,10 +193,12 @@ rule add_barcode_fragments:
     params:
         script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
     shell:
-        "set +o pipefail; "
+      #  "set +o pipefail; "
         "python3 {params.script} {input.fragments} {wildcards.sample} | bgzip > {output.fragments}; "
         "tabix -p bed {output.fragments}"
 
+
+####### CELLS SELECTION
 rule cell_selection:
   input:
       all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt",
@@ -209,11 +224,15 @@ rule cell_selection:
   shell:
       "Rscript {params.script}  --sample {wildcards.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {wildcards.binwidth}"
 
+########### FINAL TWEAKED CLUSTERING
 rule clustering_final:
   input:
     lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == wildcards.antibody]),
-    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-    'results/Sox10_RNA/clustering/GFP/markers.csv'
+    notebook       = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/{antibody}_clustering_merge.Rmd",
+    RNAmarkers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+    GFPmarkers     ='results/Sox10_RNA/clustering/GFP/markers.csv',
+    # peaks_narrow   = 'results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak', # TODL: Fix atac conflict
+    # peaks_broad    = 'results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak' # TODO: Fix atac conflict
   output:
     seurat  = "results/{antibody}/clustering/01.clustering.Rds",
     report  = "results/{antibody}/clustering/01.clustering.html",
@@ -221,38 +240,54 @@ rule clustering_final:
     bigwig  = directory("results/{antibody}/clustering/bigwig/"),
     bed     = directory("results/{antibody}/clustering/markers_bed/"),
     table   = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv",
+    
   params:
-    notebook       = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/{antibody}_clustering_merge.Rmd",
     config         = config_file,
     out_prefix     = CWD + '/results/',
     report         = CWD + '/results/{antibody}/clustering/01.clustering.html',
   shell:
-    " Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
+    " Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
 
+
+######## METAGENE PLOTS
 rule metagene:
   input:
     bw  = directory("results/{antibody}/clustering/bigwig/"),
     bed = directory("results/{antibody}/clustering/markers_bed/"),
   output:
-    "results/{antibody}/clustering/metagene/metagene.txt.gz"
+    matrix = "results/{antibody}/clustering/metagene/metagene.txt.gz",
+    png    = "results/{antibody}/clustering/metagene/metagene_plot.png",
   threads: 8
   shell:
-    "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output} -a 10000 -b 10000 -p {threads}"
+    "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} &&"
+    "plotHeatmap -m {input.matrix} -o {output.png} --sortRegions no --refPointLabel peak"
 
-rule plot_metagene:
-  input: "results/{antibody}/clustering/metagene/metagene.txt.gz"
-  output: "results/{antibody}/clustering/metagene/metagene_plot.png"
-  shell: "plotHeatmap -m {input} -o {output} --sortRegions no --refPointLabel peak"
 
-rule Sten_download:
+rule metagene_RNA_promoters:
+  input:
+    promoters  = directory('results/{RNA}/marker_promoters/'),
+    bigwig          = directory('results/{antibody}/clustering/bigwig/'),
   output:
-    loom = 'results/Sten_RNA/l5_all.loom'
-  params:
-    download_folder = CWD + '/results/Sten_RNA/',
-    loom_url        = config['RNA_seq']['Sten_RNA']['loom_source']
+    matrix  = 'results/{antibody}/metagene/metagene_{RNA}_promoters.txt.gz',
+    png     = 'results/{antibody}/metagene/metagene_{RNA}_promoters.png',
+  threads: 8
   shell:
-    'wget {params.loom_url}  -P {params.download_folder}'
-  
+    "computeMatrix reference-point -S {input.bigwig}*.bw -R {input.promoters}*.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
+    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions no --refPointLabel promoter; "
+
+################### DOWNSTREAM ANALYSIS
+rule export_bam:
+  input:
+    bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
+    table = 'results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv',
+  output:
+    sam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
+  params:
+    filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
+    sample              =   lambda wildcards: "NA" if wildcards.antibody == "scATAC_P50" else wildcards.sample,
+  shell:
+    "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.sam_files}; "
+    
 ######## Olig2
 
 rule integration_olig2:
@@ -269,10 +304,31 @@ rule integration_olig2:
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
 
-
+###### H3K4me3 GO analysis
+rule GO_H3K4me3:
+  input:
+    seurat  = "results/H3K4me3/clustering/01.clustering.Rds",
+    markers = "results/H3K4me3/clustering/markers.csv",
+  output:
+    'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
+  params:
+    notebook   = os.path.dirname(workflow.basedir) + "/notebooks/H3K4me3/GO_analysis.Rmd",
+    report     = CWD + '/results/H3K4me3/GO_terms/GO_analysis.html',
+    out_prefix = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
 
 
 ################# scRNA-seq
+rule Sten_download:
+  output:
+    loom = 'results/Sten_RNA/l5_all.loom'
+  params:
+    download_folder = CWD + '/results/Sten_RNA/',
+    loom_url        = config['RNA_seq']['Sten_RNA']['loom_source']
+  shell:
+    'wget {params.loom_url}  -P {params.download_folder}'
+
 rule Sten_RNA_clustering:
   input:
     config['RNA_seq']['Sten_RNA']['loom_file']
@@ -289,6 +345,19 @@ rule Sten_RNA_clustering:
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}'))\""
 
+rule export_marker_promoters_Sten:
+  input:
+    markers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/Sten_RNA/RNA_marker_promoters_export.Rmd',
+  output:
+    directory('results/Sten_RNA/marker_promoters/'),
+  params:
+    report     = CWD + '/results/Sten_RNA/RNA_marker_promoters_export.html',
+    out_prefix = CWD + '/results/',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+######## Sox10 RNA
 
 rule Sox10_RNA_clustering:
   input:
@@ -323,19 +392,19 @@ rule Sox10_RNA_TPM:
   shell:
     'Rscript {params.script} {input} {output}'
 
-rule export_bam:
+rule export_marker_promoters_Sox10:
   input:
-    bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
-    table = 'results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv',
+    markers     = 'results/Sox10_RNA/clustering/GFP/markers.csv',
+    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/RNA_marker_promoters_export.Rmd',
   output:
-    sam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
+    directory('results/Sox10_RNA/marker_promoters/'),
   params:
-    filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
-    sample              =   lambda wildcards: "NA" if wildcards.antibody == "scATAC_P50" else "{sample}",
+    report     = CWD + '/results/Sox10_RNA/RNA_marker_promoters_export.html',
+    out_prefix = CWD + '/results/',
   shell:
-    "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.sam_files}; "
-    
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
+################ scATAC-seq
 
 rule download_ATAC:  
   output:

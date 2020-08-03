@@ -20,6 +20,13 @@ library(EnsDb.Mmusculus.v79)
 rm(list=ls())
 set.seed(2020)
 
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
 ```
 
 ```{r}
@@ -171,6 +178,7 @@ return(p1)
 ```{r}
 brain.H3K4me3 <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
 
+
 fragments <- paste0(params$out_prefix,'/merged/H3K4me3/fragments.tsv.gz')
 fragments <- rtracklayer::import(fragments,format='bed')
 
@@ -195,12 +203,6 @@ cells.to.plot         <- filterCells(object = brain.H3K4me3,
                                      fragments = fragments.interesting,
                                      fraction=fraction)
 
-# order clusters
-clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
-
-# Colors definition - consistent accross the paper
-CTcolors        <- scales::hue_pal()(9)
-names(CTcolors) <- clusters_order
 
 
 p <- plotHeatmapBW(object = brain.H3K4me3,
@@ -235,6 +237,7 @@ dev.off()
 
 ```{r}
 brain.H3K27me3 <- readRDS(paste0(params$out_prefix,'H3K27me3',"/clustering/01.clustering.Rds"))
+brain.H3K27me3 <- RenameIdents(brain.H3K27me3,c('Micoglia'='Microglia'))
 
 fragments <- paste0(params$out_prefix,'/merged/H3K27me3/fragments.tsv.gz')
 fragments <- rtracklayer::import(fragments,format='bed')
@@ -260,14 +263,15 @@ cells.to.plot         <- filterCells(object = brain.H3K27me3,
                                      fragments = fragments.interesting,
                                      fraction=fraction)
 
-p <- plotHeatmapBW(object = brain.H3K4me3,
+p <- plotHeatmapBW(object = brain.H3K27me3,
             fragmentsGrange = fragments.interesting,
             cells = cells.to.plot,
             interestingRegion = interesting_region,
             window = window_bin,
             annotFilter = flt,
             fraction = fraction,
-            annotation_colors = list('Cluster' = CTcolors))
+            annotation_colors = list('Cluster' = CTcolors),
+            clusters_order = levels(brain.H3K4me3@active.ident)) # To have the order the same as in H3K4me3
 
 print(p)
 
@@ -278,7 +282,7 @@ p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') +
    theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
 
 
-png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_Sox10_heatmap.png'),width = 2048,height = 1024)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_Sox10_heatmap.png'),width = 2048,height = 2048)
 p
 dev.off()
 
@@ -291,12 +295,12 @@ dev.off()
     
 ```
 
-
+ # H3K27ac
 
 ```{r}
-brain.H3K27ac <- readRDS("~/snakemake/figures_paper/H3K27ac/clustering_1/01.clustering_final_brain.Rds")
+brain.H3K27ac <- readRDS(paste0(params$out_prefix,'H3K27ac',"/clustering/01.clustering.Rds"))
 
-fragments <- "~/snakemake/fragments/H3K27ac/fragments.tsv.gz"
+fragments <- paste0(params$out_prefix,'/merged/H3K27ac/fragments.tsv.gz')
 fragments <- rtracklayer::import(fragments,format='bed')
 
 interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
@@ -316,7 +320,6 @@ fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
 
 fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K27ac)]
 fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K27ac)[2]
-fraction              <- 0.1 # Override to be more consistent with the other plots
 cells.to.plot         <- filterCells(object = brain.H3K27ac,
                                      fragments = fragments.interesting,
                                      fraction=fraction)
@@ -328,7 +331,8 @@ p <- plotHeatmapBW(object = brain.H3K27ac,
             window = window_bin,
             annotFilter = flt,
             fraction = fraction,
-            annotation_colors = list('Cluster' = CTcolors))
+            annotation_colors = list('Cluster' = CTcolors),
+            clusters_order = levels(brain.H3K4me3@active.ident)) # To have the order the same as in H3K4me3
 
 print(p)
 
@@ -339,24 +343,27 @@ p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') +
    theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
 
 
-png(file = '../Figure2_src/Sox10_heatmap_H3K27ac.png',width = 2048,height = 1024)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27ac_Sox10_heatmap.png'),width = 2048,height = 1024)
 p
 dev.off()
 
 
 
 setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
+postscript(file =paste0(params$out_prefix,'/Figures/figure2_src/Sox10_gene_model.eps'),width = 8,height = 4)
 p2
 dev.off()
     
 ```
 
+# H3K36me3
 
 ```{r}
-brain.H3K36me3 <- readRDS("~/snakemake/figures_paper/H3K36me3/clustering_1/01.clustering_final_brain.Rds")
+brain.H3K36me3 <- readRDS(paste0(params$out_prefix,'H3K36me3',"/clustering/01.clustering.Rds"))
+brain.H3K36me3 <- RenameIdents(brain.H3K36me3,c("Vascular" = "VLMC"))
+brain.H3K36me3 <- brain.H3K36me3[,brain.H3K36me3@active.ident != "Unknown"]
 
-fragments <- "~/snakemake/fragments/H3K36me3/fragments.tsv.gz"
+fragments <- paste0(params$out_prefix,'/merged/H3K36me3/fragments.tsv.gz')
 fragments <- rtracklayer::import(fragments,format='bed')
 
 interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
@@ -386,7 +393,9 @@ p <- plotHeatmapBW(object = brain.H3K36me3,
             interestingRegion = interesting_region,
             window = window_bin,
             annotFilter = flt,
-            fraction = fraction,clusters_order = c("Astrocytes","mOL","OEC","COP-NFOL"))
+            fraction = fraction,
+            annotation_colors = list('Cluster' = CTcolors),
+            clusters_order = levels(brain.H3K4me3@active.ident)) # To have the order the same as in H3K4me3
 
 print(p)
 
@@ -397,19 +406,22 @@ p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') +
    theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
 
 
-png(file = '../Figure2_src/Sox10_heatmap_H3K36me3.png',width = 2048,height = 1024)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K36me3_Sox10_heatmap.png'),width = 2048,height = 1024)
 p
 dev.off()
 
 
 
 setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
+postscript(file =paste0(params$out_prefix,'/Figures/figure2_src/Sox10_gene_model.eps'),width = 8,height = 4)
 p2
 dev.off()
     
 ```
- 
+
+
+
+
 # Figure 2 markers on UMAP
 ```{r}
 featurePlotMB <- function(object,feature,reduction = 'umap',slot='counts',title='feature',pt.size=0.1){
@@ -439,14 +451,14 @@ samples <- c("H3K4me3","H3K27ac","H3K36me3")
 ```{r}
 colors <- scales::hue_pal()(5)
 
-brain.H3K4me3           <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
+brain.H3K4me3 <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
+
 
 
 brain.H3K4me3$cell_type <- brain.H3K4me3@active.ident
-
 DefaultAssay(brain.H3K4me3) <- "GA"
 
-marker.genes <- c("Rfx4","Mog","Alx3","Nes","Neu4")
+marker.genes <- c("Rfx4","Mog","Alx3","Nes","Pdgfra","Rbfox3","Gad1","Slc17a7","C1qa")
 
 p <- list()
 for(gene in marker.genes){
@@ -455,26 +467,72 @@ for(gene in marker.genes){
   p[[gene]]     <- featurePlotMB(object = brain.H3K4me3,feature = gene,title = gene,pt.size = 0.5)
 }
 
-png(file = "../Figure2_src/H3K4me3_markers.png",width = 2048,height=512)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K4me3_UMAP_markers.png'),width = 2700,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
-ggplot(data=brain.H3K4me3[,brain.H3K4me3@active.ident!='4']@meta.data,aes(x=cell_type,y=logUMI)) + 
+ggplot(data=brain.H3K4me3@meta.data,aes(x=cell_type,y=logUMI)) + 
   geom_violin(aes(fill=cell_type)) + 
-  geom_boxplot(width=0.05,outlier.shape = NA) + coord_cartesian(ylim=c(0,3.5))
+  geom_boxplot(width=0.05,outlier.shape = NA) + coord_cartesian(ylim=c(1,4.5))
 
 ggplot(data=brain.H3K4me3[,brain.H3K4me3@active.ident != '4']@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
   geom_density_ridges() + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"VLMC"=colors[3],"OEC"=colors[4],"OPC"=colors[5])) + 
-  coord_cartesian(xlim=c(2,3.5),ylim=c(1,7)) + theme_bw() + NoLegend()
+  scale_fill_manual(values = CTcolors) + 
+  coord_cartesian(xlim=c(1.5,4),ylim=c(1,10)) + theme_bw() + NoLegend() + 
+  theme(text = element_text(size=24,face = 'bold')) + ylab("") + xlab("unique reads [log10]") + ggtitle("H3K4me3")
 
-ggsave(filename = "../Figure2_src/H3K4me3_amounts.pdf",width=6,height=3)
+
+ggsave(filename =  paste0(params$out_prefix,'/Figures/figure2_src/H3K4me3_amounts.png'),width=6,height=3)
 ```
+
+
+
+# H3K27me3
+
+```{r}
+
+brain.H3K27me3 <- readRDS(paste0(params$out_prefix,'H3K27me3',"/clustering/01.clustering.Rds"))
+
+brain.H3K27me3$cell_type <- brain.H3K27me3@active.ident
+#brain.H3K27me3$cell_type <- factor(brain.H3K27me3$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","OPC"))
+
+
+DefaultAssay(brain.H3K27me3) <- "GA"
+
+marker.genes <- c("Rfx4","Olig2","Pdgfra","Nkx6-2","Alx4","Neurod2","Gad1","Foxf2","Cttn")
+
+p <- list()
+for(gene in marker.genes){
+  p[[gene]]     <- featurePlotMB(object = brain.H3K27me3,feature = gene,title = gene,pt.size = 0.5)
+}
+
+do.call(grid.arrange,c(p,nrow=1))
+
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_UMAP_markers.png'),width = 2700,height=500)
+do.call(grid.arrange,c(p,nrow=1))
+dev.off()
+
+ggplot(data=brain.H3K27me3@meta.data,aes(x=cell_type,y=logUMI)) + 
+  geom_violin(aes(fill=cell_type)) + 
+  scale_fill_manual(values = CTcolors) +
+  geom_boxplot(width=0.05,outlier.shape = NA)+ coord_cartesian(ylim=c(0,3.5))
+
+
+ggplot(data=brain.H3K27me3@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
+  geom_density_ridges() + 
+  scale_fill_manual(values = CTcolors) + 
+  coord_cartesian(xlim=c(1.5,3.5),ylim=c(1,10)) +  theme_bw() + NoLegend() + 
+  theme(text = element_text(size=24,face = 'bold')) + ylab("") + xlab("unique reads [log10]") + ggtitle("H3K27me3")
+
+ggsave(filename = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_amounts.png'),width=6,height=4)
+
+```
+
 
 # H3K27ac
 
 ```{r}
-brain.H3K27ac           <- readRDS("~/snakemake/figures_paper/H3K27ac/clustering_1/01.clustering_PA_GA.Rds")
+brain.H3K27ac           <- readRDS(paste0(params$out_prefix,'H3K27ac',"/clustering/01.clustering.Rds"))
 
 brain.H3K27ac$cell_type <- brain.H3K27ac@active.ident
 brain.H3K27ac$cell_type <- factor(brain.H3K27ac$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","OPC"))
@@ -485,43 +543,44 @@ marker.genes <- c("Rfx4","Mog","Alx4","Gmds","Scrt1")
 
 p <- list()
 for(gene in marker.genes){
-  p[[gene]]     <- featurePlotMB(object = brain.H3K27ac,feature = gene,title = gene,pt.size = 0.5)
+  p[[gene]]     <- featurePlotMB(object = brain.H3K27ac[,sample(colnames(brain.H3K27ac),5000)],feature = gene,title = gene,pt.size = 0.5)
 }
 
 do.call(grid.arrange,c(p,nrow=1))
 
-png(file = "../Figure2_src/H3K27ac_markers.png",width = 2048,height=512)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27ac_UMAP_markers.png'),width = 1500,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
 
 ggplot(data=brain.H3K27ac[,brain.H3K27ac@active.ident!='4']@meta.data,aes(x=cell_type,y=logUMI)) + 
   geom_violin(aes(fill=cell_type)) + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"OEC"=colors[4],"VLMC"=colors[3],"OPC"=colors[5])) +
+  scale_fill_manual(values = CTcolors) + 
   geom_boxplot(width=0.05,outlier.shape = NA,fill='white') + 
   coord_cartesian(ylim=c(0,4.5))
 
 ggplot(data=brain.H3K27ac[,brain.H3K27ac@active.ident != '4']@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
   geom_density_ridges() + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"VLMC"=colors[3],"OEC"=colors[4],"OPC"=colors[5])) + 
-  coord_cartesian(xlim=c(1.0,4),ylim=c(1,7)) + theme_bw()+ NoLegend()
+  scale_fill_manual(values = CTcolors) + 
+  coord_cartesian(xlim=c(1.5,4.5),ylim=c(1,7)) + theme_bw()+ NoLegend() + 
+  theme(text = element_text(size=24,face = 'bold')) + ylab("") + xlab("unique reads [log10]") + ggtitle("H3K27ac")
 
-ggsave(filename = "../Figure2_src/H3K27ac_amounts.pdf",width=6,height=3)
+
+ggsave(filename = paste0(params$out_prefix,'/Figures/figure2_src/H3K27ac_amounts.pdf'),width=6,height=3)
 ```
 
 
 # H3K36me3
 
 ```{r}
-brain.H3K36me3           <- readRDS("~/snakemake/figures_paper/H3K36me3/clustering_1/01.clustering_PA_GA.Rds") 
-
+brain.H3K36me3           <- readRDS(paste0(params$out_prefix,'H3K36me3',"/clustering/01.clustering.Rds"))
+brain.H3K36me3           <- RenameIdents(brain.H3K36me3,c("Vascular"= "VLMC"))
 
 brain.H3K36me3$cell_type <- brain.H3K36me3@active.ident
-brain.H3K36me3$cell_type <- factor(brain.H3K36me3$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","COP-NFOL"))
+
 
 DefaultAssay(brain.H3K36me3) <- "GA"
-
-marker.genes <- c("Slc1a2","Mbp","Sash1","Tns3")
+marker.genes <- c("Slc1a2","Mbp","Ptn","Tns3")
 
 p <- list()
 for(gene in marker.genes){
@@ -530,64 +589,24 @@ for(gene in marker.genes){
 
 do.call(grid.arrange,c(p,nrow=1))
 
-png(file = "../Figure2_src/H3K36me3_markers.png",width = 2048,height=512)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K36me3_UMAP_markers.png'),width = 1200,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
-ggplot(data=brain.H3K36me3[,brain.H3K36me3@active.ident!='4']@meta.data,aes(x=cell_type,y=logUMI)) + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"OEC"=colors[4],"VLMC"=colors[3],"COP-NFOL"=colors[5])) +
+ggplot(data=brain.H3K36me3[,brain.H3K36me3@active.ident!='Unknown']@meta.data,aes(x=cell_type,y=logUMI)) + 
+  scale_fill_manual(values = CTcolors) + 
   geom_violin(aes(fill=cell_type)) + 
   geom_boxplot(width=0.05,outlier.shape = NA)+ coord_cartesian(ylim=c(0,3.5))
 
-ggplot(data=brain.H3K36me3[,brain.H3K36me3@active.ident != '4']@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
+ggplot(data=brain.H3K36me3[,brain.H3K36me3@active.ident != 'Unknown']@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
   geom_density_ridges() + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"OEC"=colors[3],"COP-NFOL"=colors[5])) + 
-  coord_cartesian(xlim=c(1.0,2.8)) + theme_bw()+ NoLegend()
+  scale_fill_manual(values = CTcolors) + 
+  coord_cartesian(xlim=c(1.0,2.8),ylim=c(1,6)) + theme_bw()+ NoLegend() + 
+  theme(text = element_text(size=24,face = 'bold')) + ylab("") + xlab("unique reads [log10]") + ggtitle("H3K36me3")
 
-ggsave(filename = "../Figure2_src/H3K36me3_amounts.pdf",width=6,height=3)
+ggsave(filename = paste0(params$out_prefix,'/Figures/figure2_src/H3K36me3_amounts.pdf'),width=6,height=3)
 
 ```
 
-
-
-# H3K27me3
-
-```{r}
-
-brain.H3K27me3 <- readRDS("~/snakemake/figures_paper/H3K27me3/clustering_1/01.clustering_PA_GA.Rds")
-
-brain.H3K27me3$cell_type <- brain.H3K27me3@active.ident
-brain.H3K27me3$cell_type <- factor(brain.H3K27me3$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","OPC"))
-
-
-DefaultAssay(brain.H3K36me3) <- "GA"
-
-marker.genes <- c("Rfx4","Aldh1l1","Olig2","Sox9","Padi2")
-
-p <- list()
-for(gene in marker.genes){
-  p[[gene]]     <- featurePlotMB(object = brain.H3K27me3,feature = gene,title = gene,pt.size = 0.5)
-}
-
-do.call(grid.arrange,c(p,nrow=1))
-
-png(file = "../Figure2_src/H3K27me3_markers.png",width = 2048,height=512)
-do.call(grid.arrange,c(p,nrow=1))
-dev.off()
-
-ggplot(data=brain.H3K27me3@meta.data,aes(x=cell_type,y=logUMI)) + 
-  geom_violin(aes(fill=cell_type)) + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"OEC"=colors[4],"VLMC"=colors[3],"OPC"=colors[5])) +
-  geom_boxplot(width=0.05,outlier.shape = NA)+ coord_cartesian(ylim=c(0,3.5))
-
-
-ggplot(data=brain.H3K27me3@meta.data, aes(x=logUMI,y=cell_type,fill=cell_type))  + 
-  geom_density_ridges() + 
-  scale_fill_manual(values = c("Astrocytes"=colors[1],"mOL"=colors[2],"OEC"=colors[4],"VLMC"=colors[3],"OPC"=colors[5])) + 
-  coord_cartesian(xlim=c(1.5,3.5)) +  theme_bw() + NoLegend()
-
-ggsave(filename = "../Figure2_src/H3K27me3_amounts.pdf",width=6,height=3)
-
-```
 
 

@@ -1,0 +1,171 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  config: '../../config/config.yaml'
+  out_prefix: "~/mount/CT/git_test/results/" #'results/'
+  antibody: 'H3K4me3'
+
+---
+
+
+```{r libraries}
+library(Seurat)
+library(Signac)
+library(topGO)
+library(EnsDb.Mmusculus.v79)
+library(dplyr)
+library(purrr)
+library(pheatmap)
+
+```
+
+
+```{r GO_search}
+brain.H3K4me3 <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
+markers <- read.csv2(file=paste0(params$out_prefix,'H3K4me3',"/clustering/markers.csv"))
+markers$cluster <- gsub("_",".",markers$cluster)
+
+markers.positive <- markers[markers$avg_logFC > 0 & markers$p_val_adj < 0.05,]
+
+#all.genes <- rownames(brain[['GA']])
+all.genes <- genes(EnsDb.Mmusculus.v79)
+all.genes <- all.genes[all.genes$gene_biotype == 'protein_coding',]
+all.genes <- all.genes$gene_name
+
+GO_terms <- lapply(unique(markers.positive$cluster), function(x){
+  
+  geneList <- rep(0,length(all.genes))
+  names(geneList) <- all.genes
+  geneList[names(geneList) %in% markers.positive[markers.positive$cluster == x,'closest_gene']] <- 1
+  
+  GOdata <- new("topGOdata",
+          ontology = "BP", # use biological process ontology
+          allGenes = geneList,
+          geneSelectionFun = function(x)(x == 1),
+                annot = annFUN.org, mapping = "org.Mm.eg.db", ID = "symbol")
+  
+  resultFisher <- runTest(GOdata, algorithm = "elim", statistic = "fisher")
+  out <- GenTable(GOdata, Fisher = resultFisher, topNodes = 100, numChar = 60)
+  
+  colnames(out) <- c(colnames(out)[c(1,2)],paste0(x,"_",colnames(out)[-c(1,2)]))
+  return(out)
+})
+
+GO_terms <- lapply(GO_terms,function(x){
+  x$ID_name <- paste0(x$GO.ID," ",x$Term)
+  print(x)
+  return(x)
+})
+
+
+GO_table <- GO_terms %>% purrr::reduce(dplyr::full_join,by="ID_name")
+
+GO_matrix <- as.matrix(GO_table[,grep("Fisher",colnames(GO_table))])
+GO_matrix[is.na(GO_matrix)] <- as.double("NA")
+
+GO_matrix <- apply(GO_matrix,2,as.numeric)
+
+rownames(GO_matrix) <- GO_table[,"ID_name"]
+colnames(GO_matrix) <- unlist(lapply(strsplit(colnames(GO_matrix),"_"),"[",1))
+
+
+write.csv2(x=GO_matrix,file = paste0(params$out_prefix,params$antibody,'/GO_terms/GO_matrix_markers.csv'))
+heatmap.colors <- colorRampPalette(colors = c("Darkred","white"))(20)
+pheatmap(GO_matrix,na_col = 'grey',
+         cluster_cols = F,
+         cluster_rows = F,
+         color =heatmap.colors,filename = 'temp.pdf',width=10,height=60)
+
+
+```
+
+
+
+```{r}
+pheatmap(GO_matrix[grep("myelin",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+```{r}
+pheatmap(GO_matrix[grep("astro",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+
+```{r}
+pheatmap(GO_matrix[grep("oligo",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+```{r}
+pheatmap(GO_matrix[grep("axon",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+```{r}
+pheatmap(GO_matrix[grep("vascul",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+```{r}
+pheatmap(GO_matrix[grep("glia",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+
+
+```{r}
+pheatmap(GO_matrix[grep(" stem",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+```{r}
+pheatmap(GO_matrix[grep("behavior",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+```{r}
+pheatmap(GO_matrix[grep("proliferation",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+```{r}
+pheatmap(GO_matrix[grep("migration",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+```{r}
+pheatmap(GO_matrix[grep("neur",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+
+```{r}
+pheatmap(GO_matrix[grep("immun",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+```{r}
+pheatmap(GO_matrix[grep("radial",rownames(GO_matrix)),],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+
+```
+
+
+```{r, fig.height=6,fig.width=4}
+filterRows <- unique(grep("myelin|astro|oligo|neuro|vascul|glia| stem|immun",rownames(GO_matrix)))
+pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
