@@ -148,18 +148,18 @@ ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/Nucleosome_histo
 
 x = "H3K4me3"
 brain.H3K4me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
-brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("OPC_2"="OPC"))
+#brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("OPC_2"="OPC"))
 
 # order clusters
 clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
-
-# Reorder seurat object
-brain.H3K4me3@active.ident <- factor(brain.H3K4me3@active.ident,levels = clusters_order)
 
 # Colors definition - consistent accross the paper
 CTcolors        <- scales::hue_pal()(9)
 names(CTcolors) <- clusters_order
 
+
+# Reorder seurat object
+brain.H3K4me3@active.ident <- factor(brain.H3K4me3@active.ident,levels = clusters_order)
 
 
 p1 <- DimPlot(brain.H3K4me3,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)

@@ -1,6 +1,8 @@
 ---
 title: "R Notebook"
 output: html_notebook
+params:
+  out_prefix: '~/mount/CT/git_test/results/'  
 ---
 
 ```{r}
@@ -21,10 +23,392 @@ set.seed(2020)
 ```
 
 ```{r}
-if (dir.exists("../Figure2_src")) {unlink("../Figure2_src",recursive = TRUE)}
-dir.create("../Figure2_src")  
+dir.create(paste0(params$out_prefix,'Figures/figure2_src'))
 ```
 
+
+# H3K4me3 Sox10
+
+```{r echo=FALSE}
+fetchFragmentsByRegion <- function(fragments, region, fraction, object ) { 
+    
+    if(length(region) > 1){
+        stop("Only one region can be used")
+    }
+
+    if(class(region)[1] == "GRanges"){
+        seqlevelsStyle(region) <- "UCSC"
+        chr    = as.character(seqnames(region))
+        from  = as.numeric(start(region))
+        to    = as.numeric(end(region))
+    }
+    
+    if(class(region)[1] == "character"){
+        region <- strsplit(region,":|-")[[1]]
+        
+        chr    = as.character(region[1])
+        from  = as.numeric(region[2])
+        to    = as.numeric(region[3])
+    }
+
+    
+    # Extract fragments overalpping the region
+    fragments.interesting <- fragments[seqnames(fragments) == chr]
+    fragments.interesting <- fragments.interesting[start(fragments.interesting) > from]
+    fragments.interesting <- fragments.interesting[end(fragments.interesting) < to]
+    
+    return(fragments.interesting)
+
+}
+
+filterCells <- function(object,fragments,fraction){
+     # Make fragments per cell table
+    fragments.summary <- sort(table(c(fragments$name,colnames(object))),decreasing = TRUE) - 1
+    
+    # Split cells by cluster - return fraction of cells per cluster
+    fragments.summary.ls <-  lapply(levels(object@active.ident),function(x){
+      object.x <- object[,object@active.ident == x]
+      barcodes <- colnames(object.x)
+      fragments.summary.x <- fragments.summary[names(fragments.summary) %in% barcodes]
+      fragments.summary.x <- sort(fragments.summary.x,decreasing = TRUE)
+      head(x = fragments.summary.x, n = dim(object.x)[2] * fraction)
+    })
+    
+    # unlist and merge cella names
+    cells <- unlist(lapply(fragments.summary.ls,names))
+    return(cells)
+}
+
+
+fragmentsToMatrix <- function(fragments,window){
+    bins <- tile(range(fragments),width=window)[[1]]
+    
+    fragments.ls <- split(fragments,as.factor(fragments$name))
+    seqlevels(bins,pruning.mode = "coarse") <- names(coverage(fragments.ls[[1]]))
+
+    fragments.ls.coverage <- lapply(fragments.ls,function(x){
+        x <- coverage(x)
+        x.bins <- binnedAverage(bins = bins,numvar = x, "coverage")
+        as.numeric(x.bins$coverage)
+    })
+    
+    fragments.matrix <- t(do.call("rbind",fragments.ls.coverage))
+    rownames(fragments.matrix) <- start(bins)
+    
+    return(fragments.matrix)
+}
+
+
+plotHeatmapBW <- function(object,
+                       fragmentsGrange,
+                       interestingRegion,
+                       window = 5000,
+                       annotFilter,
+                       fraction = 0.1,
+                       clusters_order = NULL,
+                       cells = NULL,...
+                       ) {
+  
+if(is.null(clusters_order)){clusters_order  <- levels(object@active.ident)}
+if(is.null(cells)){cells.to.plot            <- sample(colnames(object),fraction * dim(object)[2])}
+
+fragments.interesting <- fragmentsGrange  
+
+
+fragments.interesting.matrix <- fragmentsToMatrix(fragments    = fragments.interesting,
+                                                  window       = window)
+
+
+fragments.interesting.matrix <- fragments.interesting.matrix[,colnames(fragments.interesting.matrix) %in% cells]
+
+
+dummy.mat <- matrix(data = 0, nrow = dim(fragments.interesting.matrix)[1],ncol = length(cells.to.plot[!cells.to.plot %in% colnames(fragments.interesting.matrix)]))
+colnames(dummy.mat) <- cells.to.plot[!cells.to.plot %in% colnames(fragments.interesting.matrix)]
+rownames(dummy.mat) <- rownames(fragments.interesting.matrix)
+
+fragments.interesting.matrix <- cbind(fragments.interesting.matrix,dummy.mat)
+                                                  
+fragments.interesting.matrix.binary <- apply(fragments.interesting.matrix,2,as.logical)
+fragments.interesting.matrix.binary <- Matrix::Matrix(apply(fragments.interesting.matrix.binary,2,as.numeric),sparse = TRUE)
+
+rownames(fragments.interesting.matrix) <- as.numeric(rownames(fragments.interesting.matrix))
+rownames(fragments.interesting.matrix.binary) <- as.numeric(rownames(fragments.interesting.matrix))
+
+
+####################################################
+round_coordinates = 250000
+
+
+
+clusters_annotations <- sample(factor(object@active.ident[colnames(fragments.interesting.matrix.binary)],levels = clusters_order))
+
+annotation_row       <- data.frame(clusters_annotations[order(clusters_annotations)])
+colnames(annotation_row) <- "Cluster"
+
+xlabels  <- as.numeric(rownames(fragments.interesting.matrix))
+xlabels[xlabels %% round_coordinates != 0] <- ""
+
+p1 <- pheatmap(t(fragments.interesting.matrix.binary)[rownames(annotation_row),],
+         cluster_rows=FALSE,
+         cluster_cols=FALSE,
+         show_rownames=FALSE,
+         show_colnames=TRUE,
+         labels_col = xlabels,
+         annotation_row = annotation_row,
+         annotation_legend= TRUE,
+         annotation_names_row = FALSE,
+         color = colorRampPalette(c("white","black"))(2),
+         gaps_row= cumsum(table(annotation_row$Cluster)[clusters_order]),
+         border_color = NA,...
+         )
+
+return(p1)
+}
+
+```
+
+
+```{r}
+brain.H3K4me3 <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
+
+fragments <- paste0(params$out_prefix,'/merged/H3K4me3/fragments.tsv.gz')
+fragments <- rtracklayer::import(fragments,format='bed')
+
+interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
+seqlevelsStyle(interesting_region) <- "NCBI"
+window_bin = 250
+
+
+
+flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
+                            GRangesFilter(interesting_region),
+                            logicOp = c("&"))
+
+fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
+                                                region    = interesting_region,
+                                                fraction  = fraction,
+                                                object    = object)
+
+fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K4me3)]
+fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K4me3)[2]
+cells.to.plot         <- filterCells(object = brain.H3K4me3,
+                                     fragments = fragments.interesting,
+                                     fraction=fraction)
+
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+p <- plotHeatmapBW(object = brain.H3K4me3,
+            fragmentsGrange = fragments.interesting,
+            cells = cells.to.plot,
+            interestingRegion = interesting_region,
+            window = window_bin,
+            annotFilter = flt,
+            fraction = fraction,
+            annotation_colors = list('Cluster' = CTcolors))
+
+
+ensdb <- EnsDb.Mmusculus.v79
+p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
+   theme_bw() +   
+   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
+   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
+
+
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K4me3_Sox10_heatmap.png'),width = 2048,height = 2048)
+p
+dev.off()
+
+
+
+setEPS()
+postscript(file = paste0(params$out_prefix,'/Figures/figure2_src/Sox10_gene_model.eps'),width = 8,height = 4)
+p2
+dev.off()
+    
+```
+
+```{r}
+brain.H3K27me3 <- readRDS(paste0(params$out_prefix,'H3K27me3',"/clustering/01.clustering.Rds"))
+
+fragments <- paste0(params$out_prefix,'/merged/H3K27me3/fragments.tsv.gz')
+fragments <- rtracklayer::import(fragments,format='bed')
+
+interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
+seqlevelsStyle(interesting_region) <- "NCBI"
+window_bin = 100
+
+
+
+flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
+                            GRangesFilter(interesting_region),
+                            logicOp = c("&"))
+
+fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
+                                                region    = interesting_region,
+                                                fraction  = fraction,
+                                                object    = object)
+
+fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K27me3)]
+fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K27me3)[2]
+cells.to.plot         <- filterCells(object = brain.H3K27me3,
+                                     fragments = fragments.interesting,
+                                     fraction=fraction)
+
+p <- plotHeatmapBW(object = brain.H3K4me3,
+            fragmentsGrange = fragments.interesting,
+            cells = cells.to.plot,
+            interestingRegion = interesting_region,
+            window = window_bin,
+            annotFilter = flt,
+            fraction = fraction,
+            annotation_colors = list('Cluster' = CTcolors))
+
+print(p)
+
+ensdb <- EnsDb.Mmusculus.v79
+p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
+   theme_bw() +   
+   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
+   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
+
+
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_Sox10_heatmap.png'),width = 2048,height = 1024)
+p
+dev.off()
+
+
+
+setEPS()
+postscript(file =paste0(params$out_prefix,'/Figures/figure2_src/Sox10_gene_model.eps'),width = 8,height = 4)
+p2
+dev.off()
+    
+```
+
+
+
+```{r}
+brain.H3K27ac <- readRDS("~/snakemake/figures_paper/H3K27ac/clustering_1/01.clustering_final_brain.Rds")
+
+fragments <- "~/snakemake/fragments/H3K27ac/fragments.tsv.gz"
+fragments <- rtracklayer::import(fragments,format='bed')
+
+interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
+seqlevelsStyle(interesting_region) <- "NCBI"
+window_bin = 100
+
+
+
+flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
+                            GRangesFilter(interesting_region),
+                            logicOp = c("&"))
+
+fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
+                                                region    = interesting_region,
+                                                fraction  = fraction,
+                                                object    = object)
+
+fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K27ac)]
+fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K27ac)[2]
+fraction              <- 0.1 # Override to be more consistent with the other plots
+cells.to.plot         <- filterCells(object = brain.H3K27ac,
+                                     fragments = fragments.interesting,
+                                     fraction=fraction)
+
+p <- plotHeatmapBW(object = brain.H3K27ac,
+            fragmentsGrange = fragments.interesting,
+            cells = cells.to.plot,
+            interestingRegion = interesting_region,
+            window = window_bin,
+            annotFilter = flt,
+            fraction = fraction,
+            annotation_colors = list('Cluster' = CTcolors))
+
+print(p)
+
+ensdb <- EnsDb.Mmusculus.v79
+p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
+   theme_bw() +   
+   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
+   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
+
+
+png(file = '../Figure2_src/Sox10_heatmap_H3K27ac.png',width = 2048,height = 1024)
+p
+dev.off()
+
+
+
+setEPS()
+postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
+p2
+dev.off()
+    
+```
+
+
+```{r}
+brain.H3K36me3 <- readRDS("~/snakemake/figures_paper/H3K36me3/clustering_1/01.clustering_final_brain.Rds")
+
+fragments <- "~/snakemake/fragments/H3K36me3/fragments.tsv.gz"
+fragments <- rtracklayer::import(fragments,format='bed')
+
+interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
+seqlevelsStyle(interesting_region) <- "NCBI"
+window_bin = 100
+
+
+
+flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
+                            GRangesFilter(interesting_region),
+                            logicOp = c("&"))
+
+fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
+                                                region    = interesting_region,
+                                                fraction  = fraction,
+                                                object    = object)
+
+fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K36me3)]
+fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K36me3)[2]
+cells.to.plot         <- filterCells(object = brain.H3K36me3,
+                                     fragments = fragments.interesting,
+                                     fraction=fraction)
+
+p <- plotHeatmapBW(object = brain.H3K36me3,
+            fragmentsGrange = fragments.interesting,
+            cells = cells.to.plot,
+            interestingRegion = interesting_region,
+            window = window_bin,
+            annotFilter = flt,
+            fraction = fraction,clusters_order = c("Astrocytes","mOL","OEC","COP-NFOL"))
+
+print(p)
+
+ensdb <- EnsDb.Mmusculus.v79
+p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
+   theme_bw() +   
+   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
+   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
+
+
+png(file = '../Figure2_src/Sox10_heatmap_H3K36me3.png',width = 2048,height = 1024)
+p
+dev.off()
+
+
+
+setEPS()
+postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
+p2
+dev.off()
+    
+```
  
 # Figure 2 markers on UMAP
 ```{r}
@@ -55,11 +439,10 @@ samples <- c("H3K4me3","H3K27ac","H3K36me3")
 ```{r}
 colors <- scales::hue_pal()(5)
 
-brain.H3K4me3           <- readRDS("~/snakemake/figures_paper/H3K4me3/clustering_1/01.clustering_PA_GA.Rds")
+brain.H3K4me3           <- readRDS(paste0(params$out_prefix,'H3K4me3',"/clustering/01.clustering.Rds"))
+
 
 brain.H3K4me3$cell_type <- brain.H3K4me3@active.ident
-brain.H3K4me3$cell_type <- factor(brain.H3K4me3$cell_type,levels=c("Astrocytes","mOL","OEC","VLMC","OPC"))
-
 
 DefaultAssay(brain.H3K4me3) <- "GA"
 
@@ -208,375 +591,3 @@ ggsave(filename = "../Figure2_src/H3K27me3_amounts.pdf",width=6,height=3)
 ```
 
 
-
-# H3K4me3 Sox10
-
-```{r echo=FALSE}
-fetchFragmentsByRegion <- function(fragments, region, fraction, object ) { 
-    
-    if(length(region) > 1){
-        stop("Only one region can be used")
-    }
-
-    if(class(region)[1] == "GRanges"){
-        seqlevelsStyle(region) <- "UCSC"
-        chr    = as.character(seqnames(region))
-        from  = as.numeric(start(region))
-        to    = as.numeric(end(region))
-    }
-    
-    if(class(region)[1] == "character"){
-        region <- strsplit(region,":|-")[[1]]
-        
-        chr    = as.character(region[1])
-        from  = as.numeric(region[2])
-        to    = as.numeric(region[3])
-    }
-
-    
-    # Extract fragments overalpping the region
-    fragments.interesting <- fragments[seqnames(fragments) == chr]
-    fragments.interesting <- fragments.interesting[start(fragments.interesting) > from]
-    fragments.interesting <- fragments.interesting[end(fragments.interesting) < to]
-    
-    return(fragments.interesting)
-
-}
-
-filterCells <- function(object,fragments,fraction){
-     # Make fragments per cell table
-    fragments.summary <- sort(table(c(fragments$name,colnames(object))),decreasing = TRUE) - 1
-    
-    # Split cells by cluster - return fraction of cells per cluster
-    fragments.summary.ls <-  lapply(levels(object@active.ident),function(x){
-      object.x <- object[,object@active.ident == x]
-      barcodes <- colnames(object.x)
-      fragments.summary.x <- fragments.summary[names(fragments.summary) %in% barcodes]
-      fragments.summary.x <- sort(fragments.summary.x,decreasing = TRUE)
-      head(x = fragments.summary.x, n = dim(object.x)[2] * fraction)
-    })
-    
-    # unlist and merge cella names
-    cells <- unlist(lapply(fragments.summary.ls,names))
-    return(cells)
-}
-
-
-fragmentsToMatrix <- function(fragments,window){
-    bins <- tile(range(fragments),width=window)[[1]]
-    
-    fragments.ls <- split(fragments,as.factor(fragments$name))
-    seqlevels(bins,pruning.mode = "coarse") <- names(coverage(fragments.ls[[1]]))
-
-    fragments.ls.coverage <- lapply(fragments.ls,function(x){
-        x <- coverage(x)
-        x.bins <- binnedAverage(bins = bins,numvar = x, "coverage")
-        as.numeric(x.bins$coverage)
-    })
-    
-    fragments.matrix <- t(do.call("rbind",fragments.ls.coverage))
-    rownames(fragments.matrix) <- start(bins)
-    
-    return(fragments.matrix)
-}
-
-
-plotHeatmapBW <- function(object,
-                       fragmentsGrange,
-                       interestingRegion,
-                       window = 5000,
-                       annotFilter,
-                       fraction = 0.1,
-                       clusters_order = NULL,
-                       cells = NULL
-                       ) {
-  
-if(is.null(clusters_order)){clusters_order  <- levels(object@active.ident)}
-if(is.null(cells)){cells.to.plot            <- sample(colnames(object),fraction * dim(object)[2])}
-
-fragments.interesting <- fragmentsGrange  
-
-
-fragments.interesting.matrix <- fragmentsToMatrix(fragments    = fragments.interesting,
-                                                  window       = window)
-
-
-fragments.interesting.matrix <- fragments.interesting.matrix[,colnames(fragments.interesting.matrix) %in% cells]
-
-
-dummy.mat <- matrix(data = 0, nrow = dim(fragments.interesting.matrix)[1],ncol = length(cells.to.plot[!cells.to.plot %in% colnames(fragments.interesting.matrix)]))
-colnames(dummy.mat) <- cells.to.plot[!cells.to.plot %in% colnames(fragments.interesting.matrix)]
-rownames(dummy.mat) <- rownames(fragments.interesting.matrix)
-
-fragments.interesting.matrix <- cbind(fragments.interesting.matrix,dummy.mat)
-                                                  
-fragments.interesting.matrix.binary <- apply(fragments.interesting.matrix,2,as.logical)
-fragments.interesting.matrix.binary <- Matrix::Matrix(apply(fragments.interesting.matrix.binary,2,as.numeric),sparse = TRUE)
-
-rownames(fragments.interesting.matrix) <- as.numeric(rownames(fragments.interesting.matrix))
-rownames(fragments.interesting.matrix.binary) <- as.numeric(rownames(fragments.interesting.matrix))
-
-
-####################################################
-round_coordinates = 250000
-
-
-
-clusters_annotations <- sample(factor(object@active.ident[colnames(fragments.interesting.matrix.binary)],levels = clusters_order))
-
-annotation_row       <- data.frame(clusters_annotations[order(clusters_annotations)])
-colnames(annotation_row) <- "Cluster"
-
-xlabels  <- as.numeric(rownames(fragments.interesting.matrix))
-xlabels[xlabels %% round_coordinates != 0] <- ""
-
-p1 <- pheatmap(t(fragments.interesting.matrix.binary)[rownames(annotation_row),],
-         cluster_rows=FALSE,
-         cluster_cols=FALSE,
-         show_rownames=FALSE,
-         show_colnames=TRUE,
-         labels_col = xlabels,
-         annotation_row = annotation_row,
-         annotation_legend= TRUE,
-         annotation_names_row = FALSE,
-         color = colorRampPalette(c("white","black"))(2),
-         gaps_row= cumsum(table(annotation_row$Cluster)[clusters_order]),
-         border_color = NA
-         )
-
-return(p1)
-}
-
-```
-
-
-```{r}
-brain.H3K4me3 <- readRDS("~/snakemake/figures_paper/H3K4me3/clustering_1/01.clustering_final_brain.Rds")
-
-fragments <- "~/snakemake/fragments/H3K4me3/fragments.tsv.gz"
-fragments <- rtracklayer::import(fragments,format='bed')
-
-interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
-seqlevelsStyle(interesting_region) <- "NCBI"
-window_bin = 250
-
-
-
-flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
-                            GRangesFilter(interesting_region),
-                            logicOp = c("&"))
-
-fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
-                                                region    = interesting_region,
-                                                fraction  = fraction,
-                                                object    = object)
-
-fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K4me3)]
-fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K4me3)[2]
-cells.to.plot         <- filterCells(object = brain.H3K4me3,
-                                     fragments = fragments.interesting,
-                                     fraction=fraction)
-
-p <- plotHeatmapBW(object = brain.H3K4me3,
-            fragmentsGrange = fragments.interesting,
-            cells = cells.to.plot,
-            interestingRegion = interesting_region,
-            window = window_bin,
-            annotFilter = flt,
-            fraction = fraction)
-
-
-ensdb <- EnsDb.Mmusculus.v79
-p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
-   theme_bw() +   
-   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
-   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
-
-
-png(file = '../Figure2_src/Sox10_heatmap_H3K4me3.png',width = 2048,height = 1024)
-p
-dev.off()
-
-
-
-setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
-p2
-dev.off()
-    
-```
-
-
-```{r}
-brain.H3K27ac <- readRDS("~/snakemake/figures_paper/H3K27ac/clustering_1/01.clustering_final_brain.Rds")
-
-fragments <- "~/snakemake/fragments/H3K27ac/fragments.tsv.gz"
-fragments <- rtracklayer::import(fragments,format='bed')
-
-interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
-seqlevelsStyle(interesting_region) <- "NCBI"
-window_bin = 100
-
-
-
-flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
-                            GRangesFilter(interesting_region),
-                            logicOp = c("&"))
-
-fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
-                                                region    = interesting_region,
-                                                fraction  = fraction,
-                                                object    = object)
-
-fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K27ac)]
-fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K27ac)[2]
-fraction              <- 0.1 # Override to be more consistent with the other plots
-cells.to.plot         <- filterCells(object = brain.H3K27ac,
-                                     fragments = fragments.interesting,
-                                     fraction=fraction)
-
-p <- plotHeatmapBW(object = brain.H3K27ac,
-            fragmentsGrange = fragments.interesting,
-            cells = cells.to.plot,
-            interestingRegion = interesting_region,
-            window = window_bin,
-            annotFilter = flt,
-            fraction = fraction)
-
-print(p)
-
-ensdb <- EnsDb.Mmusculus.v79
-p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
-   theme_bw() +   
-   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
-   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
-
-
-png(file = '../Figure2_src/Sox10_heatmap_H3K27ac.png',width = 2048,height = 1024)
-p
-dev.off()
-
-
-
-setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
-p2
-dev.off()
-    
-```
-
-```{r}
-brain.H3K27me3 <- readRDS("~/snakemake/figures_paper/H3K27me3/clustering_1/01.clustering_final_brain.Rds")
-
-fragments <- "~/snakemake/fragments/H3K27me3/fragments.tsv.gz"
-fragments <- rtracklayer::import(fragments,format='bed')
-
-interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
-seqlevelsStyle(interesting_region) <- "NCBI"
-window_bin = 100
-
-
-
-flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
-                            GRangesFilter(interesting_region),
-                            logicOp = c("&"))
-
-fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
-                                                region    = interesting_region,
-                                                fraction  = fraction,
-                                                object    = object)
-
-fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K27me3)]
-fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K27me3)[2]
-cells.to.plot         <- filterCells(object = brain.H3K27me3,
-                                     fragments = fragments.interesting,
-                                     fraction=fraction)
-
-p <- plotHeatmapBW(object = brain.H3K27me3,
-            fragmentsGrange = fragments.interesting,
-            cells = cells.to.plot,
-            interestingRegion = interesting_region,
-            window = window_bin,
-            annotFilter = flt,
-            fraction = fraction,clusters_order = c("Astrocytes","mOL","OEC","VLMC"))
-
-print(p)
-
-ensdb <- EnsDb.Mmusculus.v79
-p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
-   theme_bw() +   
-   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
-   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
-
-
-png(file = '../Figure2_src/Sox10_heatmap_H3K27me3.png',width = 2048,height = 1024)
-p
-dev.off()
-
-
-
-setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
-p2
-dev.off()
-    
-```
-
-
-
-```{r}
-brain.H3K36me3 <- readRDS("~/snakemake/figures_paper/H3K36me3/clustering_1/01.clustering_final_brain.Rds")
-
-fragments <- "~/snakemake/fragments/H3K36me3/fragments.tsv.gz"
-fragments <- rtracklayer::import(fragments,format='bed')
-
-interesting_region <- StringToGRanges("chr15:79105302-79183935",sep=c(":","-"))
-seqlevelsStyle(interesting_region) <- "NCBI"
-window_bin = 100
-
-
-
-flt <- AnnotationFilterList(TxBiotypeFilter("protein_coding"),
-                            GRangesFilter(interesting_region),
-                            logicOp = c("&"))
-
-fragments.interesting <- fetchFragmentsByRegion(fragments = fragments,
-                                                region    = interesting_region,
-                                                fraction  = fraction,
-                                                object    = object)
-
-fragments.interesting <- fragments.interesting[fragments.interesting$name %in% colnames(brain.H3K36me3)]
-fraction              <- length(unique(fragments.interesting$name)) / dim(brain.H3K36me3)[2]
-cells.to.plot         <- filterCells(object = brain.H3K36me3,
-                                     fragments = fragments.interesting,
-                                     fraction=fraction)
-
-p <- plotHeatmapBW(object = brain.H3K36me3,
-            fragmentsGrange = fragments.interesting,
-            cells = cells.to.plot,
-            interestingRegion = interesting_region,
-            window = window_bin,
-            annotFilter = flt,
-            fraction = fraction,clusters_order = c("Astrocytes","mOL","OEC","COP-NFOL"))
-
-print(p)
-
-ensdb <- EnsDb.Mmusculus.v79
-p2 <- ggbio::autoplot(ensdb,which=flt,names.expr="gene_name",mode='reduce') + 
-   theme_bw() +   
-   coord_cartesian(xlim=c(start(interesting_region),end(interesting_region))) + 
-   theme(plot.margin = margin(t = 5.5, r = 0, b = 5.5, l = -20,unit="pt"))
-
-
-png(file = '../Figure2_src/Sox10_heatmap_H3K36me3.png',width = 2048,height = 1024)
-p
-dev.off()
-
-
-
-setEPS()
-postscript(file = '../Figure2_src/Sox10_gene_model.eps',width = 8,height = 4)
-p2
-dev.off()
-    
-```

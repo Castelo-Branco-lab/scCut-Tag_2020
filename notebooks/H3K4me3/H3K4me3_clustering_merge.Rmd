@@ -78,7 +78,7 @@ brain.merged  <- brain.merged[,brain.merged$logUMI > 1.8]
 assay = paste0("bins_",window)
 
 brain.merged <- RunTFIDF(brain.merged)
-brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q5')
+brain.merged <- FindTopFeatures(brain.merged, min.cutoff = 'q0')
   
 brain.merged <- RunSVD(
   object = brain.merged,
@@ -94,19 +94,24 @@ brain.merged <- RunUMAP(
   dims = 2:80
 )
 
-  brain.merged <- FindNeighbors(
-    object = brain.merged,
-    reduction = 'lsi',
-    dims = 2:80
-  )
-  brain.merged <- FindClusters(
-    object = brain.merged,
-    algorithm = 3,
-    resolution = 1.6,
-    verbose = FALSE
-  )
+brain.merged <- FindNeighbors(
+  object = brain.merged,
+  reduction = 'lsi',
+  dims = 2:25
+)
+
+brain.merged <- FindClusters(
+  object = brain.merged,
+  algorithm = 3,
+  resolution = 1,
+  verbose = FALSE
+)
   
-  DimPlot(brain.merged,label=TRUE)
+DimPlot(brain.merged,label=TRUE)
+
+DimPlot(brain.merged[,brain.merged@active.ident==3],label=TRUE,pt.size=0.1)+ coord_cartesian(xlim=c(-3,6),ylim=c(0,10))
+DimPlot(brain.merged[,brain.merged@active.ident==4],label=TRUE,pt.size=0.1)+ coord_cartesian(xlim=c(-3,6),ylim=c(0,10))
+DimPlot(brain.merged[,brain.merged@active.ident %in% 0:10],label=TRUE,pt.size=0.1)+ coord_cartesian(xlim=c(-10,10),ylim=c(-10,10))
 
 ```
 
@@ -192,19 +197,17 @@ DimPlot(brain.merged,label=TRUE) + NoLegend()
 small.clusters <- table(brain.merged@active.ident)
 
 # Remove cluster 6 - cells with no markers, and inconsistent - doublets?
-
-brain.merged <- brain.merged[,brain.merged@active.ident != 6]
-
+brain.merged <- brain.merged[,brain.merged@active.ident != 8]
 
 # Rename the clusters
 brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
-                                    '1' = 'mOL',
-                                    '2' = 'Astrocytes',
+                                    '1' = 'Astrocytes',
+                                    '2' = 'mOL',
                                     '3' = 'VLMC',
-                                    '4' = 'Neurons_1',
-                                    '5' = 'Neurons_2',
-                                    '7' = 'OPC',
-                                    '8' = 'OEC',
+                                    '4' = 'OEC',
+                                    '5' = 'Neurons_1',
+                                    '6' = 'OPC',
+                                    '7' = 'Neurons_2',
                                     '9' = 'Microglia',
                                     '10' = 'Neurons_3')
 
