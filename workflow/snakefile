@@ -56,15 +56,19 @@ rule all:
     
     'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
-  
 
     # Clustering final Cut&Tag
     expand("results/{antibody}/clustering/01.clustering.Rds",antibody = list(set(antibody_list))),
 
-    # Metagene plot
-    expand("results/{antibody}/clustering/metagene/metagene_plot.png",antibody = list(set(antibody_list))),
-    expand('results/{antibody}/metagene/metagene_{RNA}_RNA_promoters.png',antibody = list(set(antibody_list)),RNA=["Sten","Sox10"]),
 
+    ################ Downstream analysis
+    # Export for metagene
+    expand(directory('results/{antibody}/clustering/markers_bed_genes/'),antibody = list(set(antibody_list))),
+
+    # Metagene plot
+    expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_plot.png",antibody_bw = list(set(antibody_list)),antibody_bed = list(set(antibody_list))),
+    expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_genes.png",antibody_bw = list(set(antibody_list)),antibody_bed = list(set(antibody_list))),
+    expand('results/{antibody}/metagene/metagene_{RNA}_RNA_{genes}.png',antibody = list(set(antibody_list)),RNA=["Sten","Sox10"],genes=['promoters','genes_scaled']),
 
     # Export bam per cluster
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
@@ -74,6 +78,10 @@ rule all:
 
     # integration
     'results/Olig2/integration/integrated.Rds',
+    'results/integration/histone_3active/histone_3active_integrated.Rds',
+    'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds',
+    'results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.Rds',
+
 
     # GO terms
     'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
@@ -249,33 +257,58 @@ rule clustering_final:
     " Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
 
 
+###########################################################
+################### DOWNSTREAM ANALYSIS ###################
+###########################################################
+
+rule markers_to_gene:
+  input:
+    markers  = 'results/{antibody}/clustering/markers.csv'
+  output:
+    directory('results/{antibody}/clustering/markers_bed_genes/')
+  params:
+    script = os.path.dirname(workflow.basedir) + "/scripts/R/markers_to_bed.R"
+  shell:
+    "Rscript {params.script} {input.markers} {output}"
+
+
 ######## METAGENE PLOTS
 rule metagene:
   input:
-    bw  = directory("results/{antibody}/clustering/bigwig/"),
-    bed = directory("results/{antibody}/clustering/markers_bed/"),
+    bw       = directory("results/{antibody1}/clustering/bigwig/"),
+    bed      = directory("results/{antibody2}/clustering/markers_bed/"),
+    bed_gene = directory("results/{antibody2}/clustering/markers_bed_genes/"),
   output:
-    matrix = "results/{antibody}/clustering/metagene/metagene.txt.gz",
-    png    = "results/{antibody}/clustering/metagene/metagene_plot.png",
+    matrix1 = "results/{antibody1}/metagene/{antibody2}/metagene_plot.txt.gz",
+    png1    = "results/{antibody1}/metagene/{antibody2}/metagene_plot.png",
+    matrix2 = "results/{antibody1}/metagene/{antibody2}/metagene_genes.txt.gz",
+    png2    = "results/{antibody1}/metagene/{antibody2}/metagene_genes.png",
   threads: 8
   shell:
-    "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} &&"
-    "plotHeatmap -m {input.matrix} -o {output.png} --sortRegions no --refPointLabel peak"
+    "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output.matrix1} -a 10000 -b 10000 -p {threads} &&"
+    "plotHeatmap -m {output.matrix1} -o {output.png1} --sortRegions no --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
+    
+    "computeMatrix scale-regions -S {input.bw}*.bw -R {input.bed_gene}*.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} &&"
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions no --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
+
 
 
 rule metagene_RNA_promoters:
   input:
     promoters  = directory('results/{RNA}/marker_promoters/'),
-    bigwig          = directory('results/{antibody}/clustering/bigwig/'),
+    bigwig     = directory('results/{antibody}/clustering/bigwig/'),
   output:
-    matrix  = 'results/{antibody}/metagene/metagene_{RNA}_promoters.txt.gz',
-    png     = 'results/{antibody}/metagene/metagene_{RNA}_promoters.png',
+    matrix   = 'results/{antibody}/metagene/metagene_{RNA}_promoters.txt.gz',
+    png      = 'results/{antibody}/metagene/metagene_{RNA}_promoters.png',
+    matrix2  = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.txt.gz',
+    png2     = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.png',
   threads: 8
   shell:
-    "computeMatrix reference-point -S {input.bigwig}*.bw -R {input.promoters}*.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
-    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions no --refPointLabel promoter; "
+    "computeMatrix reference-point -S {input.bigwig}*.bw -R {input.promoters}*_promoters.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
+    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions no --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
+    "computeMatrix scale-regions -S {input.bigwig}*.bw -R {input.promoters}*_genes.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions no --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
 
-################### DOWNSTREAM ANALYSIS
 rule export_bam:
   input:
     bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
@@ -287,6 +320,21 @@ rule export_bam:
     sample              =   lambda wildcards: "NA" if wildcards.antibody == "scATAC_P50" else wildcards.sample,
   shell:
     "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.sam_files}; "
+
+###### Integration 3 active marks
+rule integration_active:
+  input:
+    "results/H3K4me3/clustering/01.clustering.Rds",
+    "results/H3K27ac/clustering/01.clustering.Rds",
+    "results/H3K36me3/clustering/01.clustering.Rds",
+    notebook = os.path.dirname(workflow.basedir) + "/notebooks/integration/integration_3active.Rmd",
+  output:
+    "results/integration/histone_3active/histone_3active_integrated.Rds",
+  params:
+    report     = CWD + "/results/integration/histone_3active/Histone_3active_integrated.html",
+    out_prefix = CWD + "/results/"
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\" "
     
 ######## Olig2
 
@@ -304,6 +352,7 @@ rule integration_olig2:
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
 
+
 ###### H3K4me3 GO analysis
 rule GO_H3K4me3:
   input:
@@ -317,6 +366,23 @@ rule GO_H3K4me3:
     out_prefix = CWD + '/results/'
   shell:
     "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
+
+
+####### H3K4me4 RNA integration
+rule H3K4me3_Sten_integrate:
+  input:
+    'results/H3K4me3/clustering/01.clustering.Rds',
+    'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/integration/integration_H3K4me3_RNA.Rmd',
+  output:
+    'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds'
+  params:
+    report = CWD + '/results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.html',
+    out_prefix = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+
 
 
 ################# scRNA-seq
@@ -403,6 +469,36 @@ rule export_marker_promoters_Sox10:
     out_prefix = CWD + '/results/',
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+############### Marques RNA
+
+rule download_marques:
+  output:
+    metadata = 'results/marques_RNA/data/Marques2016annotation.rds',
+    matrix   = 'results/marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz',
+  params:
+    url    = config['RNA_seq']['Marques_RNA']['url'],
+    annot  = os.path.dirname(workflow.basedir) + '/data/Marques2016annotation.rds',
+    outdir = 'results/marques_RNA/data/'
+  shell:
+    "wget -P {params.outdir} {params.url}; "
+    "cp {params.annot} {params.outdir}"
+
+rule marques_proccess_and_integrate:
+  input:
+    'results/marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz',
+    'results/marques_RNA/data/Marques2016annotation.rds',
+    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/integration/integration_H3K4me3_marques.Rmd',
+  output:
+    'results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.Rds',
+    'results/marques_RNA/clustering/01.clustering.Rds',
+  params:
+    report     = CWD + '/results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.html',
+    out_prefix = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+
 
 ################ scATAC-seq
 

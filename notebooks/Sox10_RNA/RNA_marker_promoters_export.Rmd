@@ -34,9 +34,22 @@ genes.promoters$symbol <- conversion.table[genes.promoters$gene_id,"symbol",drop
 
 lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == x,]
+  markers.x <- head(markers.x,100)
   promoters.x <- genes.promoters[genes.promoters$symbol %in% markers.x$gene]
-  rtracklayer::export(object = promoters.x,con = paste0(params$out_prefix,"/Sox10_RNA/marker_promoters/promoters_",x,".bed"))
+  rtracklayer::export(object = promoters.x,con = paste0(params$out_prefix,"/Sox10_RNA/marker_promoters/",x,"_promoters.bed"))
 })
 
 ```
 
+```{r}
+genes.genes <- genes(EnsDb.Mmusculus.v79)
+genes.genes <- genes.genes[genes.genes$gene_biotype %in% c("protein_coding","lincRNA"),]
+
+lapply(clusters_to_use,function(x){
+  markers.x <- markers.pos[markers.pos$cluster == x,]
+  markers.x <- head(markers.x,100)
+  genes.x <- genes.genes[genes.genes$symbol %in% markers.x$gene]
+  rtracklayer::export(object = genes.x,con = paste0(params$out_prefix,"/Sox10_RNA/marker_promoters/",x,"_genes.bed"))
+})
+
+```

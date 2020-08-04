@@ -288,7 +288,7 @@ rtracklayer::export.bw(object = coverage.x,con = paste0(params$out_prefix,params
 DefaultAssay(brain.merged) <- 'peaks'
 
 
-markers.peaks <- FindAllMarkers(brain.merged,min.pct = 0.01,logfc.threshold = 0.1,slot = 'data')
+markers.peaks <- FindAllMarkers(brain.merged,min.pct = 0.001,logfc.threshold = 0.1,slot = 'data')
 
 markers.peaks$closest_gene <- ClosestFeature(StringToGRanges(markers.peaks$gene ), genebodyandpromoter.coords.flat)$name
 #View(markers.peaks)

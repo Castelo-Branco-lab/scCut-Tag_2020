@@ -1,0 +1,110 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+
+
+```{r}
+suppressMessages({library(Seurat)
+  library(gridExtra)
+  library(dplyr)
+  library(Signac)
+  library(EnsDb.Mmusculus.v79)
+  library(ggplot2)
+  library(ggthemes)
+  library(BSgenome.Mmusculus.UCSC.mm10)
+})
+
+set.seed(100)
+
+```
+
+
+
+```{r}
+brain.H3K4me3   <- readRDS(file=paste0(params$out_prefix,'H3K4me3/clustering/01.clustering.Rds'))
+brain.H3K27ac   <- readRDS(file=paste0(params$out_prefix,'H3K27ac/clustering/01.clustering.Rds'))
+brain.H3K36me3  <- readRDS(file=paste0(params$out_prefix,'H3K36me3/clustering/01.clustering.Rds'))
+
+brain.H3K4me3   <- brain.H3K4me3[,brain.H3K4me3$GFP == "GFP+" & brain.H3K4me3$Age == "P25"]
+brain.H3K36me3  <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
+
+DimPlot(brain.H3K4me3,group.by='cell_type') + ggtitle("H3K4me3")
+DimPlot(brain.H3K27ac,group.by='cell_type') + ggtitle("H3K27ac")
+DimPlot(brain.H3K36me3,group.by='cell_type') + ggtitle("H3K36me3")
+
+```
+
+```{r}
+assay = 'GA'
+
+DefaultAssay(brain.H3K4me3)  <- assay
+DefaultAssay(brain.H3K27ac)  <- assay
+DefaultAssay(brain.H3K36me3) <- assay
+
+min_reads = 5
+
+features.common.table <- table(c(rownames(brain.H3K4me3)[Matrix::rowSums(brain.H3K4me3[[assay]]@counts) > min_reads],
+                                rownames(brain.H3K27ac)[Matrix::rowSums(brain.H3K27ac[[assay]]@counts) > min_reads],
+                                rownames(brain.H3K36me3)[Matrix::rowSums(brain.H3K36me3[[assay]]@counts) > min_reads]))
+
+peaks.use <- names(features.common.table[features.common.table == 3])
+length(peaks.use)
+
+anchors <- FindIntegrationAnchors(
+  object.list = list(brain.H3K4me3, brain.H3K27ac, brain.H3K36me3),
+  anchor.features = peaks.use,
+  assay = rep(assay,3),
+  k.filter = NA,reference = 1
+)
+
+
+integrated <- IntegrateData(
+  anchorset = anchors,
+  preserve.order = TRUE
+)
+
+integrated <- RunSVD(
+  object = integrated,
+  n = 50,
+  reduction.name = 'integratedLSI'
+)
+
+integrated <- RunUMAP(
+  object = integrated,
+  dims = 2:40,
+  reduction = 'integratedLSI')
+
+
+
+integrated.plot <- integrated[,integrated$cell_type %in% c('mOL','Astrocytes','OPC','VLMC','OEC')]
+
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+
+
+p2 <- DimPlot(integrated.plot, group.by = 'orig.ident', pt.size = 0.2) + ggplot2::ggtitle("Integrated")
+
+p4 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K27ac"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K27ac") + NoLegend() + scale_color_manual(values = CTcolors)
+p5 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K4me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K4me3") + NoLegend() + scale_color_manual(values = CTcolors)
+p6 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K36me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K36me3") + NoLegend() + scale_color_manual(values = CTcolors)
+
+p2
+p4+p5 + p6
+p4
+p5
+p6
+```
+```{r}
+saveRDS(object = integrated,file = paste0(params$out_prefix,'integration/histone_3active/histone_3active_integrated.Rds'))
+```
+

@@ -1,0 +1,102 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(EnsDb.Mmusculus.v79)
+library(ensembldb)
+library(GenomicRanges)
+
+set.seed(2020)
+```
+
+
+```{r}
+brain.H3K4me3 <- readRDS(file = paste0(params$out_prefix,"H3K4me3/clustering/01.clustering.Rds"))
+brain.RNA     <- readRDS(file = paste0(params$out_prefix,"Sten_RNA/clustering/01.clustering_20000cells.Rds"))
+
+brain.RNA$cell_type     <- brain.RNA$TaxonomyRank4
+```
+
+# Remove cells from periphery
+
+```{r}
+brain.RNA <- brain.RNA[,-grep("Enteric",brain.RNA$TaxonomyRank4)]
+brain.RNA <- brain.RNA[,-grep("Peripheral",brain.RNA$TaxonomyRank4)]
+```
+
+
+```{r,fig.width=18,fig.height=9}
+p1 <- DimPlot(brain.H3K4me3,label=TRUE) + NoLegend()
+p2 <- DimPlot(brain.RNA,label=TRUE,group.by='cell_type',repel=TRUE) + NoLegend()
+p1+p2
+```
+
+
+```{r,fig.width=18,fig.height=9}
+DefaultAssay(brain.H3K4me3) <- "GA"
+
+rm(transfer.anchors)
+rm(inputation)
+rm(coembed)
+
+common.genes <- intersect(rownames(brain.H3K4me3),rownames(brain.RNA))
+
+transfer.anchors <- FindTransferAnchors(
+  reference = brain.RNA,
+  query = brain.H3K4me3,
+  reduction = 'cca',
+  query.assay = 'GA',reference.assay = 'RNA',
+  k.filter = NA,features = common.genes
+)
+
+genes.use <- VariableFeatures(brain.RNA)
+refdata <- GetAssayData(brain.RNA, assay = "RNA", slot = "data")[genes.use, ]
+
+imputation <- TransferData(anchorset = transfer.anchors, refdata = refdata, weight.reduction = brain.H3K4me3[["lsi"]])
+
+brain.H3K4me3[['RNA']] <- imputation
+coembed <- merge(x = brain.RNA, y = brain.H3K4me3)
+
+coembed <- ScaleData(coembed, features = genes.use, do.scale = FALSE)
+coembed <- RunPCA(coembed, features = genes.use, verbose = FALSE)
+coembed <- RunUMAP(coembed, dims = 1:30)
+
+DimPlot(brain.RNA)
+DimPlot(coembed,group.by= 'antibody')
+DimPlot(coembed,group.by = 'cell_type') + NoLegend()
+
+p1 <- DimPlot(coembed[,coembed$antibody == "H3K4me3"])
+p2 <- DimPlot(coembed[,grep('10X',coembed$orig.ident)],group.by='TaxonomyRank4',label=TRUE,repel=TRUE) + NoLegend()
+
+p1+p2
+
+DimPlot(coembed[,coembed$antibody == "H3K4me3" & coembed$cell_type %in% c('Neurons_1','Neurons_2','Neurons_3')]) + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15))
+```
+
+
+
+```{r}
+saveRDS(object = coembed,file = paste0(params$out_prefix,"integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

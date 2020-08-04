@@ -1,0 +1,72 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+```{r}
+library(Seurat)
+library(ggplot2)
+```
+
+```{r}
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+```
+
+
+# Integration 3 active
+
+```{r,fig.width=12,fig.height=4}
+brain <- readRDS(paste0(params$out_prefix,'integration/histone_3active/histone_3active_integrated.Rds'))
+
+clusters <- c("mOL",
+              "Astrocytes",
+              "OEC",
+              "OPC",
+              "VLMC")
+
+brain <- brain[,brain$cell_type %in% clusters]
+
+p1 <- DimPlot(brain[,brain$antibody == "H3K4me3"]) + scale_color_manual(values = CTcolors)  + NoLegend() + NoAxes()
+p2 <-  DimPlot(brain[,brain$antibody == "H3K27ac"]) + scale_color_manual(values = CTcolors) + NoLegend() + NoAxes()
+p3 <- DimPlot(brain[,brain$antibody == "H3K36me3"]) + scale_color_manual(values = CTcolors) + NoLegend() + NoAxes()
+
+p1+p2+p3
+ggsave(p1+p2+p3,filename = paste0(params$out_prefix,'Figures/figure3_src/3active_integrated.png'),width=12,height = 4)
+```
+
+```{r,fig.width=8,fig.height=4}
+integrated <- readRDS(paste0(params$out_prefix,'integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds'))
+
+integrated$antibody[is.na(integrated$antibody)] <- "RNA"
+
+
+DimPlot(integrated,group.by='antibody') + scale_color_brewer(palette = 'Set1')
+
+p1 <- DimPlot(integrated[,integrated$antibody == 'H3K4me3'],group.by = 'cell_type') + NoLegend() + NoAxes() + scale_color_manual(values = CTcolors)
+p2 <- DimPlot(integrated[,integrated$antibody == 'RNA'],group.by = 'cell_type') + NoLegend() + NoAxes()
+
+p1 + p2
+
+ggsave(p1+p2,filename = paste0(params$out_prefix,'Figures/figure3_src/H3K4me3_RNA_coembeding.png'),width=8,height=4)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -169,6 +169,8 @@ RNA_seq:
     # Loom file from Linnarsson web
     loom_source:  https://storage.googleapis.com/linnarsson-lab-loom/l5_all.loom
     loom_file:     results/Sten_RNA/l5_all.loom
+  Marques_RNA:
+    url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE75nnn/GSE75330/suppl/GSE75330_Marques_et_al_mol_counts2.tab.gz
 
 ATAC_seq:
   P50:
