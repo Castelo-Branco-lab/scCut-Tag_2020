@@ -1,58 +1,13 @@
 ---
 title: "R Notebook"
-output:
-  html_document:
-    df_print: paged
+output: html_notebook
+params:
+  out_prefix: '~/mount/CT/git_test/results/'  
+
 ---
 
 
-```{r}
-library(Seurat)
-library(ggplot2)
-library(pheatmap)
-library(gridExtra)
 
-rm(list=ls())
-```
-
-# scRNA integration - Figure S3
-
-```{r}
-brain.integrated <- readRDS("~/snakemake/Sox10_RNA/02.scRNA_atlas_integrated.Rds")
-
-p1 <- DimPlot(brain.integrated[,brain.integrated$dataset == "SL_atlas_20k"],group.by="TaxonomyRank3") + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15)) + NoLegend()
-p2 <- DimPlot(brain.integrated[,brain.integrated$dataset == "Sox10_GFP+"]) + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15)) + NoLegend()
-
-DimPlot(brain.integrated[,brain.integrated$dataset == "SL_atlas_20k"],group.by="TaxonomyRank3",label=TRUE)  + NoLegend()
-
-p1
-p2
-
-ggsave(filename = "../FigureS3_src/RNA_label_transfer_UMAP_SL.pdf",
-       plot = AugmentPlot(p1),width = 8,height = 8)
-
-ggsave(filename = "../FigureS3_src/RNA_label_transfer_UMAP_Sox10.pdf",
-       plot = AugmentPlot(p2),width = 8,height = 8)
-
-```
-
-
-
-
-# Replicates for fig S3
-
-```{r}
-samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3","Olig2")
-
-p <- lapply(samples,function(x){
-  brain <- readRDS(paste0("~/snakemake/figures_paper/",x,"/clustering_1/01.clustering_final_brain.Rds"))
-  DimPlot(brain,group.by='sample')
-})
-
-p <- do.call("grid.arrange",p)
-ggsave(filename = "../FigureS3_src/FigS3_replicates_UMAP.png", plot = p,width = 16,height=24)
-
-```
 
 
 
@@ -60,63 +15,17 @@ ggsave(filename = "../FigureS3_src/FigS3_replicates_UMAP.png", plot = p,width = 
 # Figure S3? 
 
 ```{r,fig.width=4,fig.height=4}
-GO_matrix <- read.csv2(file="~/snakemake/figures_paper/H3K4me3/clustering_1/GO_terms/GO_matrix_markers_GA.csv",row.names = 1,stringsAsFactors = FALSE)
+GO_matrix <- read.csv2(file=paste0(params$out_prefix,'H3K4me3/GO_terms/GO_matrix_markers.csv'),row.names = 1,stringsAsFactors = FALSE)
 
 
-filterRows <- unique(grep("myelin|astro|oligo|axon|vascul|glia| stem",rownames(GO_matrix)))
+filterRows <- unique(grep("myelin|astro|oligo|axon|neuro|vascul|glia| stem",rownames(GO_matrix)))
 
-heatmap.colors <- colorRampPalette(colors = c("red","white","blue"))(20)
+
+heatmap.colors <- colorRampPalette(colors = c("darkred","white"))(20)
 pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
 
-pdf(file = "../FigureS3_src/GO_terms_heatmap.pdf")
+
+pdf(file = paste0(params$out_prefix,"/Figures/figureS3_src/GO_heatmap.pdf"),width=10,height=14)
 pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
 dev.off()
 ```
-
-# OPC / COP-NFOL modules in H3K27me3
-
-```{r}
-rm(list=ls())
-brain.H3K27me3.modules <- readRDS("~/snakemake/figures_paper/H3K27me3/gene_modules/03.gene_modules_all.Rds")
-
-
-FeaturePlot(brain.H3K27me3.modules,"OPC",min.cutoff = 0.02,max.cutoff = 0.07) + scale_color_gradient(low='grey95',high='brown') + ggtitle("Module: OPC")
-FeaturePlot(brain.H3K27me3.modules,"OPC",min.cutoff = 0.01,max.cutoff = 0.07,pt.size = 0.2) + scale_color_gradient2(low='blue',mid='white',high='red',midpoint = 0.04) + ggtitle("Module: OPC")
-
-FeaturePlot(brain.H3K27me3.modules,"COP.NFOL",min.cutoff = 0.01,max.cutoff = 0.05,pt.size = 0.2) + scale_color_gradient2(low='blue',mid='white',high='red',midpoint = median(brain.H3K27me3.modules$COP.NFOL,na.rm = TRUE))+ ggtitle("Module: COP-NFOL")
-FeaturePlot(brain.H3K27me3.modules,"COP.NFOL",min.cutoff = 0.01,max.cutoff = 0.05,pt.size = 0.2) +scale_color_viridis_c() + ggtitle("Module: COP-NFOL")
-
-
-p1 <- FeaturePlot(brain.H3K27me3.modules,"OPC",min.cutoff = 0.01,max.cutoff = 0.07,pt.size=1.5) +scale_color_viridis_c() + ggtitle("Module: OPC") +theme(text = element_text(size = 26,face = 'bold'))
-ggsave(AugmentPlot(p1),filename="../FigureS3_src/FigS3_H3K27me3_OPC_module.pdf",width=6,height=6)
-
-p2 <-FeaturePlot(brain.H3K27me3.modules,"COP.NFOL",min.cutoff = 0.01,max.cutoff = 0.05,pt.size=1.5) +scale_color_viridis_c() + ggtitle("Module: COP-NFOL") + theme(text = element_text(size = 26,face = 'bold'))
-ggsave(AugmentPlot(p2),filename="../FigureS3_src/FigS3_H3K27me3_COP-NFOL_module.pdf",width=6,height=6)
-```
-
-# Breadth marker/all genes in general
-
-```{r}
-breadth.df <- readRDS("~/snakemake/figures_paper/H3K4me3/breadth/breadth.rds")
-
-p1 <- ggplot(data=breadth.df,aes(x=name,y=width,fill=name)) + 
-  geom_boxplot(outlier.shape = NA,col='black') + 
-  coord_cartesian(ylim=c(0,10000)) + 
-  scale_fill_brewer(palette = "Set1") + 
-  theme_few() + xlab("")
-
-p2 <- ggplot(data=breadth.df,aes(x=width,fill=name,y=..density..)) + 
-  geom_histogram(alpha=0.7,position='identity',bins=60,col='black') + 
-#  geom_density(alpha=0.6) + 
-  scale_fill_brewer(palette = 'Set1')  + 
-  scale_x_log10() + 
-  coord_cartesian(xlim=c(100,20000)) + theme_few() + theme(text = element_text(size = 26,face = 'bold'))
-
-ggsave(p2,filename = "../FigureS3_src/breadth_histogram.pdf",width=7,height=4)
-```
-
-
-
-
-
-

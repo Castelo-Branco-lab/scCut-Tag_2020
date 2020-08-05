@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(pheatmap)
+library(gridExtra)
+```
+
+# scRNA integration - Figure S3
+
+```{r}
+brain.integrated <- readRDS(paste0(params$out_prefix,"Sox10_RNA/integration/scRNA_integrated.Rds"))
+
+p1 <- DimPlot(brain.integrated[,brain.integrated$dataset == "SL_atlas_20k"],group.by="TaxonomyRank3") + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15)) + NoLegend()
+p2 <- DimPlot(brain.integrated[,brain.integrated$dataset == "Sox10_GFP+"]) + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15)) + NoLegend()
+
+DimPlot(brain.integrated[,brain.integrated$dataset == "SL_atlas_20k"],group.by="TaxonomyRank3",label=TRUE)  + NoLegend()
+
+p1
+p2
+
+ggsave(filename = paste0(params$out_prefix,"Figures/figureS5_src/RNA_label_transfer_UMAP_SL.pdf"),
+       plot = AugmentPlot(p1),width = 8,height = 8)
+
+ggsave(filename = paste0(params$out_prefix,"Figures/figureS5_src/RNA_label_transfer_UMAP_Sox10.pdf"),
+       plot = AugmentPlot(p2),width = 8,height = 8)
+
+```
+
+
+# Breadth marker/all genes in general
+
+```{r}
+breadth.df <- readRDS("~/snakemake/figures_paper/H3K4me3/breadth/breadth.rds")
+
+p1 <- ggplot(data=breadth.df,aes(x=name,y=width,fill=name)) + 
+  geom_boxplot(outlier.shape = NA,col='black') + 
+  coord_cartesian(ylim=c(0,10000)) + 
+  scale_fill_brewer(palette = "Set1") + 
+  theme_few() + xlab("")
+
+p2 <- ggplot(data=breadth.df,aes(x=width,fill=name,y=..density..)) + 
+  geom_histogram(alpha=0.7,position='identity',bins=60,col='black') + 
+#  geom_density(alpha=0.6) + 
+  scale_fill_brewer(palette = 'Set1')  + 
+  scale_x_log10() + 
+  coord_cartesian(xlim=c(100,20000)) + theme_few() + theme(text = element_text(size = 26,face = 'bold'))
+
+ggsave(p2,filename = "../FigureS3_src/breadth_histogram.pdf",width=7,height=4)
+```
+
+
+
+
+
+

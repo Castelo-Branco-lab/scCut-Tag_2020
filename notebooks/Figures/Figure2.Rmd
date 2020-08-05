@@ -17,7 +17,6 @@ library(pheatmap)
 library(GenomicRanges)
 library(EnsDb.Mmusculus.v79)
 
-rm(list=ls())
 set.seed(2020)
 
 # order clusters
@@ -467,7 +466,7 @@ for(gene in marker.genes){
   p[[gene]]     <- featurePlotMB(object = brain.H3K4me3,feature = gene,title = gene,pt.size = 0.5)
 }
 
-png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K4me3_UMAP_markers.png'),width = 2700,height=500)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K4me3_UMAP_markers.png'),width = 3600,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
@@ -508,7 +507,7 @@ for(gene in marker.genes){
 
 do.call(grid.arrange,c(p,nrow=1))
 
-png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_UMAP_markers.png'),width = 2700,height=500)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27me3_UMAP_markers.png'),width = 3600,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
@@ -548,7 +547,7 @@ for(gene in marker.genes){
 
 do.call(grid.arrange,c(p,nrow=1))
 
-png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27ac_UMAP_markers.png'),width = 1500,height=500)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K27ac_UMAP_markers.png'),width = 1800,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 
@@ -589,7 +588,7 @@ for(gene in marker.genes){
 
 do.call(grid.arrange,c(p,nrow=1))
 
-png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K36me3_UMAP_markers.png'),width = 1200,height=500)
+png(file = paste0(params$out_prefix,'/Figures/figure2_src/H3K36me3_UMAP_markers.png'),width = 1500,height=500)
 do.call(grid.arrange,c(p,nrow=1))
 dev.off()
 

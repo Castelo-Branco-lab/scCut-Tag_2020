@@ -65,7 +65,7 @@ brain.H3K4me3.OL <- brain.H3K4me3[,brain.H3K4me3$cell_type %in% c("mOL","OPC")]
 brain.H3K4me3.OL <- FindTopFeatures(brain.H3K4me3.OL,min.cutoff = 'q5')
 brain.H3K4me3.OL <- RunTFIDF(brain.H3K4me3.OL)
 brain.H3K4me3.OL <- RunSVD(brain.H3K4me3.OL, reduction.key = 'LSI_',reduction.name = 'lsi')
-brain.H3K4me3.OL <- RunUMAP(brain.H3K4me3.OL,reduction = 'lsi', dims=2:10)
+brain.H3K4me3.OL <- RunUMAP(brain.H3K4me3.OL,reduction = 'lsi', dims=2:30)
 
 DimPlot(brain.H3K4me3.OL)
 ```
@@ -73,21 +73,29 @@ DimPlot(brain.H3K4me3.OL)
 
 
 ```{r, fig.width=12,fig.height=12}
-new_ids <- brain.RNA$cell_class
-
-new_ids[new_ids == 'NFOL2'] <- 'NFOL1'
-new_ids[new_ids == 'MFOL2'] <- 'MFOL1'
-new_ids[new_ids == 'MOL3']  <- 'MOL2'
-new_ids[new_ids == 'MOL5']  <- 'MOL6'
-
-new_ids[new_ids == 'MOL6'] <- 'MOL5/6'
-new_ids[new_ids == 'MOL2'] <- 'MOL2/3'
-new_ids[new_ids == 'NFOL1'] <- 'NFOL'
-new_ids[new_ids == 'MFOL1'] <- 'MFOL'
-
-
-brain.RNA <- SetIdent(object = brain.RNA, cells = names(new_ids),value = new_ids)
 markers <- FindAllMarkers(brain.RNA)
+write.csv2(x = markers, file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
+
+new_ids <- as.character(brain.RNA$cell_class)
+
+new_ids[new_ids == 'NFOL2'] <- 'NFOL'
+new_ids[new_ids == 'NFOL1'] <- 'NFOL'
+new_ids[new_ids == 'MFOL2'] <- 'MFOL'
+new_ids[new_ids == 'MFOL1'] <- 'MFOL'
+new_ids[new_ids == 'MOL3']  <- 'MOL23'
+new_ids[new_ids == 'MOL2']  <- 'MOL23'
+new_ids[new_ids == 'MOL5']  <- 'MOL56'
+new_ids[new_ids == 'MOL6']  <- 'MOL56'
+
+
+brain.RNA <- SetIdent(brain.RNA,cells = names(new_ids),value = new_ids)
+DimPlot(brain.RNA)
+
+markers <- FindAllMarkers(brain.RNA)
+write.csv2(x =  markers,file = paste0(params$out_prefix,"marques_RNA/clustering/markers_merged_clusters.csv"))
+```
+
+```{r, fig.width=12,fig.height=12}
 
 markers.pos <- markers %>% group_by(cluster) %>% dplyr::filter(p_val_adj < 0.05 & avg_logFC > 0) %>% dplyr::top_n(n = 200,wt = p_val_adj)
 
@@ -113,7 +121,8 @@ do.call(grid.arrange,p.ls)
 
 ```
 
-```{r,fig.width=18,fig.height=9}
+
+```{r,fig.width=10,fig.height=5}
 DefaultAssay(brain.H3K4me3.OL) <- "GA"
 
 rm(transfer.anchors)
@@ -155,7 +164,7 @@ p1+p2
 
 ```
 
-```{r,fig.width=18,fig.height=4}
+```{r,fig.width=4,fig.height=4}
 coembed <- AddMetaData(coembed,cluster.scores)
 
 p.ls <- lapply(colnames(cluster.scores),function(x){
@@ -165,15 +174,20 @@ p.ls <- lapply(colnames(cluster.scores),function(x){
     theme(legend.position = 'bottom')
 })
 
-#do.call(grid.arrange,c(p.ls[c(8,1,7,2,6,4)],'ncol'=6))
 
 p.ls
 ```
 
+```{r, fig.width=24,fig.height=4}
+do.call(grid.arrange,c(p.ls[c(8,1,7,2,6,4)],'ncol'=6))
+
+```
+
+
 
 ```{r}
 saveRDS(object = brain.RNA,file = paste0(params$out_prefix,"marques_RNA/clustering/01.clustering.Rds"))
-saveRDS(object = coembed,file = paste0(params$out_prefix,"integration/H3K4me3_RNA/H3K4me3_marques_coembed.Rds"))
+saveRDS(object = coembed,file = paste0(params$out_prefix,"integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds"))
 ```
 
 

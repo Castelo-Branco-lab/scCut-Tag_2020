@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+```{r libraries}
+library(Seurat)
+library(Signac)
+library(slingshot)
+library(RColorBrewer)
+library(viridis)
+library(Hmisc)
+
+set.seed(2020)
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
+```
+
+
+```{r run_slingshot}
+# Load coembeded CT with scRNA-seq
+brain <- readRDS(paste0(params$out_prefix,'/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds'))
+
+# Keep only the CT data
+brain <- brain[,brain$antibody == "H3K4me3"]
+
+# Run Slingshot on the PCA 50 dimensions
+slingshot.result <- slingshot(data = brain@reductions[['pca']]@cell.embeddings[,1:30],clusterLabels = brain$cell_type)
+pt <- slingPseudotime(slingshot.result)
+
+```
+
+```{r, fig.width=5,fig.height=9}
+par(mfrow=c(3,1))
+# Plot
+cell_colors <- CTcolors[brain$cell_type]
+plot(reducedDim(slingshot.result),col = cell_colors,pch=16,cex=0.5,axes=FALSE,main='clusters')
+lines(slingshot.result, lwd = 2,  col = 'black')
+
+# Pseudotime
+pt <- slingPseudotime(slingshot.result)
+
+cell_colors = viridis(100,option = "B")[cut(pt[,1],breaks=100)]
+plot(reducedDim(slingshot.result),col=cell_colors,pch=16,cex=0.5,axes=FALSE,main='pseudotime')
+lines(slingshot.result, lwd = 2,  col = 'black')
+
+# mOL signature
+cell_colors <- viridis(100)[Hmisc::cut2(brain$marker_Sox10_Oligodendrocytes / brain$marker_Oligodendrocyte.precursor.cells,g = 100)]
+plot(reducedDim(slingshot.result)[,1:2],col=cell_colors,pch=16,cex=0.5,axes=FALSE,main='mOL signature')
+lines(slingshot.result, lwd = 2,  col = 'black')
+
+```
+
+
+```{r}
+brain$pseudotime <- pt
+FeaturePlot(brain,'pseudotime') + scale_color_viridis()
+```
+
+```{r export}
+saveRDS(brain,paste0(params$out_prefix,'H3K4me3/pseudotime/pseudotime_OLG_final.Rds'))
+saveRDS(slingshot.result,paste0(params$out_prefix,'H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds'))
+```
+
+
+
+
+
+
+
+
+
+
+
+

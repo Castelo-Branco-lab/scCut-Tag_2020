@@ -80,14 +80,20 @@ rule all:
     'results/Olig2/integration/integrated.Rds',
     'results/integration/histone_3active/histone_3active_integrated.Rds',
     'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds',
-    'results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.Rds',
-
+    'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
 
     # GO terms
     'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
 
     # scATAC
     'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+
+    # Pseudotime
+    'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds',
+    'results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds',
+
+    # H3K4me3 spreading
+    "results/H3K4me3/spreading/spreading.Rdata",
 
 ################## PREPROCESSING
 rule bam_to_bw:
@@ -382,10 +388,51 @@ rule H3K4me3_Sten_integrate:
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
+###### H3K4me3 pseudotime
+rule pseudotime:
+  input:
+    seurat   = 'results/H3K4me3/clustering/01.clustering.Rds',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/H3K4me3/pseudotime.Rmd',
+  output:
+    'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds',
+    'results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds'
+  params:
+    out_prefix = CWD + '/results/',
+    report     = CWD + '/results/H3K4me3/pseudotime/pseudotime_final.html',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+
+######### H3K4me3 spreading
+
+rule spreading_H3K4me3:
+  input:
+    "results/H3K4me3/clustering/01.clustering.Rds",
+    "results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds",
+    "results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds",
+    "results/merged/H3K4me3/fragments.tsv.gz",
+    "results/Sox10_RNA/clustering/GFP/markers.csv",
+    "results/merged/H3K4me3/macs/broad/H3K4me3_peaks.broadPeak",
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/H3K4me3/spreading.Rmd',
+  output:
+    "results/H3K4me3/spreading/spreading.Rdata",
+  params:
+    out_prefix = CWD + "/results/",
+    report     = CWD + "/results/H3K4me3/spreading/spreading.html",
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
 
 
-################# scRNA-seq
+
+
+#############################################
+################# scRNA-seq #################
+#############################################
+
+# Mouse brain atlas SL lab
+
+
 rule Sten_download:
   output:
     loom = 'results/Sten_RNA/l5_all.loom'
@@ -461,12 +508,27 @@ rule Sox10_RNA_TPM:
 rule export_marker_promoters_Sox10:
   input:
     markers     = 'results/Sox10_RNA/clustering/GFP/markers.csv',
-    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/RNA_marker_promoters_export.Rmd',
+    notebook    = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/RNA_marker_promoters_export.Rmd',
   output:
     directory('results/Sox10_RNA/marker_promoters/'),
   params:
     report     = CWD + '/results/Sox10_RNA/RNA_marker_promoters_export.html',
     out_prefix = CWD + '/results/',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+# Integration Sox10 - SL scRNA-seq
+
+rule integrate_scRNA_seq:
+  input:
+    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
+    'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/integration_2RNA.Rmd',
+  output:
+    'results/"Sox10_RNA/integration/scRNA_integrated.Rds'
+  params:
+    report     = 'results/"Sox10_RNA/integration/scRNA_integrated.html',
+    out_prefix =  CWO + '/results/'
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
@@ -490,10 +552,12 @@ rule marques_proccess_and_integrate:
     'results/marques_RNA/data/Marques2016annotation.rds',
     notebook   = os.path.dirname(workflow.basedir) + '/notebooks/integration/integration_H3K4me3_marques.Rmd',
   output:
-    'results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.Rds',
+    'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
     'results/marques_RNA/clustering/01.clustering.Rds',
+    "results/marques_RNA/clustering/markers_merged_clusters.csv",
+    "results/marques_RNA/clustering/markers.csv",
   params:
-    report     = CWD + '/results/integration/H3K4me3_RNA/H3K4me3_marques_coembed.html',
+    report     = CWD + '/results/integration/H3K4me3_marques/H3K4me3_marques_coembed.html',
     out_prefix = CWD + '/results/'
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""

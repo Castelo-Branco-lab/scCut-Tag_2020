@@ -368,67 +368,71 @@ library(Gviz)
 library(RColorBrewer)
 library(TxDb.Mmusculus.UCSC.mm10.knownGene)
 library(GenomicFeatures)
+library(Signac)
 
 txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
 
-bw.files <- list.files("~/snakemake/figures_paper/H3K4me3/clustering_1/bigwig/")
-bw.files <- bw.files[c(1,2,3,5,4)]
+bw.files <- list.files(paste0(params$out_prefix,"H3K4me3/clustering/bigwig/"),full.names = TRUE)
+samples  <- c("Astrocytes","mOL","OPC","OEC","Neurons_1","Neurons_2","Neurons_3","Microglia","VLMC")
 
-samples  <- gsub(".bw","",gsub("cluster_","",bw.files))
+bw.files <- bw.files[unlist(lapply(samples,function(x){x=grep(pattern = x, x = bw.files);return(x)}))]
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x);x})
 
-bw.files <- paste0("~/snakemake/figures_paper/H3K4me3/clustering_1/bigwig/",bw.files)
-
-bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
 marker.regions <- c(
-                    StringToGRanges("chr10:84743128-84770673 ",sep = c(":","-")),              # Rfx4
- #                   StringToGRanges("chr10:84544797-85035996",sep = c(":","-")),              # Rfx4 wide
+                    StringToGRanges("chr10:84743128-84770673 ",sep = c(":","-")),             # Rfx4
                     StringToGRanges("chr17:37003063-37027942",sep = c(":","-")),              # Mog
-                    StringToGRanges("chr3:87962494-87990625",sep = c(":","-")),               # Nes
-                    StringToGRanges("chr3:107590843-107628160",sep = c(":","-")),             # Alx3
-                    StringToGRanges("chr1:94018857-94036377",sep=c(":","-")))                 # Neu4
+                    StringToGRanges("chr1:94018857-94036377",sep=c(":","-")),                 # Neu4
+                    StringToGRanges("chr2:93640434-93683339",sep = c(":","-")),                # Alx4
+                    StringToGRanges("chr7:45160851-45184539",sep = c(":","-")),               # Slc17a7
+                    StringToGRanges("chr1:172029209-172064795",sep = c(":","-")),             # Nhlh1 
+                    StringToGRanges("chr11:107885553-107924725",sep = c(":","-")),            # Cacng5 
+                    StringToGRanges("chr4:136864079-136914542",sep = c(":","-")),             # C1q
+                    StringToGRanges("chr13:31616602-31669941",sep = c(":","-")))              # Foxf2
+                    
 
-
-
-to.plot.ls <- to.plot.ls <- lapply(bw.ls,function(x){
-  x <- subsetByOverlaps(x,marker.regions[1])
-  x
+to.plot.ls <- lapply(bw.ls,function(x){
+ x <- subsetByOverlaps(x,sort(marker.regions))
+ x
 })
 
+# Colors defined by CTcolors
+CTcolors
 
-
-colors= scales::hue_pal()(5)
 
 
 p <- lapply(seq(marker.regions),function(y){
-  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /100) * 100)
-  bw.tracks <- lapply(seq(to.plot.ls),function(x){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /10) * 10)
+  #ylimits = c(0,40)
+  bw.tracks <- lapply(seq(bw.ls),function(x){
     track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
                        from = start(marker.regions[y]), to = end(marker.regions[y]),
                        type="polygon",showTitle=FALSE,col.axis="black",
                        background.title="transparent",col.baseline="black",
-                       col.mountain="transparent",fill.mountain=c(colors[x],colors[x]),ylim=ylimits)
+                       col.mountain="transparent",fill.mountain=c(CTcolors[x],CTcolors[x]),ylim=ylimits,yTicksAt = ylimits)
     track
   })
   
   myAxisTrack <- GenomeAxisTrack(col="black")
-  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
-                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
-                             stacking = 'full',col='black',fill='red')
+   grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                              chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                              stacking = 'squish',col='black',fill='red')
   return(c(myAxisTrack,bw.tracks,grtrack))
 })
 
-pdf(file = "../Figure1_src/markers_pseudobulk_H3K4me3.pdf",width = 2,height=4)
+pdf(file = paste0(params$out_prefix,'Figures/figure1_src/pseudobulk_H3K4me3.pdf'),width = 2,height=24)
 sapply(seq(marker.regions),function(x){
   plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
-             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions)),1))
+             scale=5000,min.width=1,min.distance=1,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions)),2))
+  
 })
 dev.off()
 
 
 
-
+knitr::knit_exit()
 ```
 
+#################### END HERE
 
 ```{r,fig.width=4,fig.height=4}
 library(Gviz)
@@ -574,18 +578,17 @@ marker.regions <- c(
 
 
 
-to.plot.ls <- to.plot.ls <- lapply(bw.ls,function(x){
+to.plot.ls <- lapply(bw.ls,function(x){
   x <- subsetByOverlaps(x,marker.regions[1])
   x
 })
 
 
 
-colors= scales::hue_pal()(5)
-
+CTcolors <-CTcolors[samples]
 
 p <- lapply(seq(marker.regions),function(y){
-  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /100) * 100)
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /10) * 10)
   bw.tracks <- lapply(seq(to.plot.ls),function(x){
     track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
                        from = start(marker.regions[y]), to = end(marker.regions[y]),
@@ -596,16 +599,13 @@ p <- lapply(seq(marker.regions),function(y){
   })
   
   myAxisTrack <- GenomeAxisTrack(col="black")
-  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
-                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
-                             stacking = 'full',col='black',fill='red')
-  return(c(myAxisTrack,bw.tracks,grtrack))
+  return(c(myAxisTrack,bw.tracks))
 })
 
-pdf(file = "../Figure2_src/markers_pseudobulk.pdf",width = 2,height=4)
+pdf(file = paste0("~/temp_pseudobulk.pdf"),width = 2,height=4)
 sapply(seq(marker.regions),function(x){
   plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
-             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions)),1))
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(marker.regions))))
 })
 dev.off()
 ```
