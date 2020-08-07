@@ -81,6 +81,23 @@ brain.merged[[assay]] <- CreateAssayObject(counts = bins.mat)
 
 ```
 
+# Add promoter activity assay
+
+```{r promoter_activity_assay}
+# Fetch promoter coordinates
+promoter.coords <- promoters(EnsDb.Mmusculus.v79)
+promoter.coords <- promoter.coords[promoter.coords$tx_biotype == "protein_coding" | promoter.coords$tx_biotype== "lincRNA"]
+seqlevelsStyle(promoter.coords) <- 'UCSC'
+
+fragments.path <- paste0(params$out_prefix,'/merged/',params$antibody,'/fragments.tsv.gz')
+promoter.matrix <- FeatureMatrix(fragments = fragments.path,features = promoter.coords,cells = colnames(brain.merged))
+
+promoters.key <- promoter.coords$tx_name
+names(promoters.key) <- GRangesToString(promoter.coords)
+rownames(promoter.matrix) <- promoters.key[rownames(promoter.matrix)]
+promoter.matrix <- promoter.matrix[rownames(promoter.matrix) != "",]
+brain.merged[['PA']] <- CreateAssayObject(counts = promoter.matrix)
+```
 
 
 ```{r cluster_and_dimreduce}
@@ -210,7 +227,7 @@ markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodya
 markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
 markers.negative <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = -avg_logFC)
 
-saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+#saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
 write.csv2(  x = markers,           file = paste0(params$out_prefix,params$antibody,"/clustering/markers.csv"))
 write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antibody,"/clustering/markers_top.csv"))
 write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antibody,"/clustering/markers_negative.csv"))
@@ -218,19 +235,20 @@ write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antib
 ```
 
 
+
 ```{r export_bw}
 samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
 samples <- samples[samples == params$antibody]
 
-fragments.ls <- lapply(names(samples),function(x){
-  fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
-  fragments <- rtracklayer::import(fragments,format = 'bed')
-  fragments
-})
+# fragments.ls <- lapply(names(samples),function(x){
+#   fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
+#   fragments <- rtracklayer::import(fragments,format = 'bed')
+#   fragments
+# })
+# fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
+# fragments <- sort(fragments)
 
-fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
-fragments <- sort(fragments)
-
+fragments <- rtracklayer::import(con = fragments.path,format = 'bed')
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
@@ -241,11 +259,12 @@ exportBW <- function(object,cluster,fragments){
   }
   
   new_read <- GRanges(seqnames = chrom.sizes[,1], 
-          ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
-                          width=1),
-          name = "in_silico_extra_read",
-          score = 0
-          )
+        ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
+                        width=1),
+        name = rep("in_silico_extra_read",dim(chrom.sizes)[1]),
+        score = rep(0,dim(chrom.sizes)[1])
+        )
+
   
   fragments.x <- fragments$name %in% cells
   fragments.x <- fragments[fragments.x]
@@ -380,4 +399,26 @@ colnames(cluster.annotations) <- paste0("#",colnames(cluster.annotations))
 write.csv(x = cluster.annotations, file=paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/cluster_barcode_table.csv'),row.names = FALSE,quote = FALSE,)
 
 ```
+
+```{r peaks_markers}
+brain.merged <- readRDS(file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+fragments    <- paste0(params$out_prefix,"/merged/H3K27ac/fragments.tsv.gz")
+peaks        <- paste0(params$out_prefix,"/merged/H3K27ac/macs/broad/H3K27ac_peaks.broadPeak")
+peaks        <- rtracklayer::import(peaks)
+
+peak.matrix  <- FeatureMatrix(fragments = fragments,features = peaks,cells = colnames(brain.merged))
+brain.merged[['peaks']] <- CreateAssayObject(counts = peak.matrix)
+
+DefaultAssay(brain.merged) <- 'peaks'
+markers <- FindAllMarkers(brain.merged,min.pct = 0.005,logfc.threshold = 0.1)
+
+write.csv2(x = markers,file = paste0(params$out_prefix,"/H3K27ac/clustering/peaks_markers.csv"))
+saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+
+```
+
+
+
+
+
 

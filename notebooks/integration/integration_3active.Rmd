@@ -32,7 +32,7 @@ brain.H3K27ac   <- readRDS(file=paste0(params$out_prefix,'H3K27ac/clustering/01.
 brain.H3K36me3  <- readRDS(file=paste0(params$out_prefix,'H3K36me3/clustering/01.clustering.Rds'))
 
 brain.H3K4me3   <- brain.H3K4me3[,brain.H3K4me3$GFP == "GFP+" & brain.H3K4me3$Age == "P25"]
-brain.H3K36me3  <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
+#brain.H3K36me3  <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
 
 DimPlot(brain.H3K4me3,group.by='cell_type') + ggtitle("H3K4me3")
 DimPlot(brain.H3K27ac,group.by='cell_type') + ggtitle("H3K27ac")

@@ -1,0 +1,130 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  config: '../../config/config.yaml'
+  out_prefix: "~/mount/CT/git_test/results/" #'results/'
+---
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(rtracklayer)
+library(GenomicFeatures)
+library(EnsDb.Mmusculus.v79)
+library(dplyr)
+```
+
+
+```{r read_config}
+config <- yaml::read_yaml(params$config)
+```
+
+
+```{r}
+# Read the scRNA-seq marker genes
+RNA.markers          <- read.csv2(file=paste0(params$out_prefix,"/Sox10_RNA/clustering/GFP/markers.csv"),row.names = 1)
+RNA.markers.positive <- RNA.markers[RNA.markers$avg_logFC > 0 & RNA.markers$p_val_adj < 0.05,]
+
+RNA.markers.top      <- RNA.markers.positive %>% group_by(cluster) %>% top_n(200,wt = avg_logFC)
+
+```
+
+
+```{r}
+antibody <- unlist(lapply(config[['samples']][names(config$samples)],function(x){x[["Antibody"]]}))
+samples  <- antibody[antibody == "H3K4me3"]
+
+cellranger_peaks <- unlist(lapply(config[['samples']][names(samples)],function(x){x[['cellranger_out']]}))
+cellranger_peaks <- paste0(cellranger_peaks,'/outs/peaks.bed')
+
+# Localy
+#cellranger_peaks <- gsub("/data/proj/GCB_MB/","~/mount/",cellranger_peaks)
+```
+
+```{r}
+peaks                            <- lapply(cellranger_peaks,function(x){rtracklayer::import(x)})
+peaks                            <- do.call(c,peaks)
+
+promoters.strict                 <- promoters(EnsDb.Mmusculus.v79,downstream = 250,upstream = 250)
+seqlevelsStyle(promoters.strict) <- "UCSC"
+
+op <- findOverlaps(query = peaks,subject = promoters.strict)
+
+peaks <- peaks[queryHits(op)]
+peaks$gene <- promoters.strict[subjectHits(op)]$gene_id
+```
+
+```{r}
+genes.ann <- as.data.frame(genes(EnsDb.Mmusculus.v79))[,c('gene_id','gene_name')]
+
+peaks$gene_name <- genes.ann[peaks$gene,'gene_name']
+peaks <- unique(peaks)
+
+median(width(peaks))
+median(width(peaks[peaks$gene_name %in% RNA.markers.top$gene]))
+
+# Create dfs for the plots
+df <- data.frame(width = width(peaks),name='all_genes')
+df <- rbind(df,data.frame(width = width(peaks[peaks$gene_name %in% RNA.markers.top$gene]),name='marker_genes'))
+
+df.log <- data.frame(width = log10(width(peaks)),name='all_genes')
+df.log <- rbind(df.log,data.frame(width = log10(width(peaks[peaks$gene_name %in% RNA.markers.top$gene])),name='marker_genes'))
+
+# Plots in log scale
+ggplot(data=df.log,aes(x=width,fill=name,y=..density..)) + 
+  geom_histogram(alpha=0.7,position='identity',bins=60,col='black') + 
+#  geom_density(alpha=0.6) + 
+  scale_fill_brewer(palette = 'Set1')  + 
+  coord_cartesian(xlim=c(2,4.3)) 
+
+ggplot(data=df.log,aes(x=width,col=name)) + 
+  stat_ecdf(lwd=2) + 
+  coord_cartesian(xlim=c(2,4)) + 
+  scale_color_brewer(palette = 'Set1') 
+
+# Plots in normal scale
+ggplot(data=df,aes(x=width,fill=name,y=..density..)) + 
+  geom_histogram(alpha=0.6,position='identity',bins=60) + 
+  scale_fill_brewer(palette = 'Set1') + 
+  coord_cartesian(xlim=c(0,15000))
+
+
+ggplot(data=df,aes(x=name,y=width,fill=name)) + 
+  geom_boxplot(outlier.shape = NA,col='black') + 
+  coord_cartesian(ylim=c(0,10000)) + 
+  scale_fill_brewer(palette = "Set1") +  xlab("")
+```
+
+
+
+```{r}
+markers.widths.by.cluster <- lapply(levels(RNA.markers.top$cluster),function(x){
+  genes <- RNA.markers.top[RNA.markers.top$cluster == x,]$gene
+  width(peaks[peaks$gene_name %in% genes])
+})
+
+names(markers.widths.by.cluster) <- levels(RNA.markers.top$cluster)
+
+markers.widths.by.cluster<-  lapply(seq(markers.widths.by.cluster),function(x){
+  data.frame(width=markers.widths.by.cluster[[x]],name=names(markers.widths.by.cluster)[x])
+})
+
+df.clusters <- do.call(rbind,markers.widths.by.cluster)
+df.clusters <- rbind(df.clusters,data.frame(width=width(peaks),name="all peaks"))
+
+
+ggplot(df.clusters) + 
+  stat_ecdf(aes(x=width,col=name)) + 
+  scale_color_brewer(palette = "Set1") + 
+  coord_cartesian(xlim=c(0,15000)) + 
+  ylab("cummulative fraction") + 
+  xlab("peak width") 
+```
+
+```{r}
+save.image(file = paste0(params$out_prefix,'/H3K4me3/spreading/breadth.Rdata'))
+```
+

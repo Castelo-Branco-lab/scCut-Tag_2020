@@ -183,6 +183,8 @@ ATAC_seq:
       bam_url:              https://cg.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
       bam_index_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai
 
+db:
+  genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"
 
 
 

@@ -2,55 +2,109 @@
 title: "R Notebook"
 output: html_notebook
 params:
-  out_prefix: "~/mount/CT/git_test/results"
+  out_prefix: "~/mount/CT/git_test/results/"
 ---
-
-
 
 ```{r}
 library(Seurat)
+library(Signac)
 library(ggplot2)
 library(pheatmap)
+library(viridis)
+```
 
-set.seed(2020)
+```{r}
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+
 ```
 
 
 ```{r}
-load(paste0(params$out_prefix,"H3K4me3/spreading/spreading.Rdata"))
+load(paste0(params$out_prefix,"/H3K4me3/spreading/breadth.Rdata"))
 
-ann_row <- mOL.signature[,c('cluster','pseudotime'),drop=FALSE]
+p1 <- ggplot(data=breadth.df,aes(x=name,y=width,fill=name)) + 
+  geom_boxplot(outlier.shape = NA,col='black') + 
+  coord_cartesian(ylim=c(0,10000)) + 
+  scale_fill_brewer(palette = "Set1") + 
+  xlab("")
+ 
+p2 <- ggplot(data=breadth.df,aes(x=width,fill=name,y=..density..)) + 
+  geom_histogram(alpha=0.7,position='identity',bins=60,col='black') + 
+  scale_fill_brewer(palette = 'Set1')  + 
+  scale_x_log10() + 
+  coord_cartesian(xlim=c(100,20000)) + theme_bw() + theme(text = element_text(size = 26,face = 'bold'),legend.position = 'top',legend.title = element_blank())
 
+ggsave(p2,filename = paste0(params$out_prefix,"/Figures/figure4_src/breadth_histogram.pdf"),width=7,height=4)
+p2
+```
 
-# Sort the cells in the heatmap by mOL Signature
-ann_row    <- ann_row[order(ann_row$pseudotime),]
+```{r}
+df.clusters <- df.clusters[!df.clusters$name %in% c("VEC","Pericytes"),]
+
+CTcolors.mod        <- CTcolors
+names(CTcolors.mod) <- c("Astrocytes","VLMC","Oligodendrocytes","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","all peaks")
+
+ggplot(df.clusters) + 
+  stat_ecdf(aes(x=width,col=name),lwd=0.8) + 
+  scale_color_brewer(palette = "Set1") + 
+  ylab("cummulative fraction") + 
+  xlab("peak width") + theme_bw() + coord_cartesian(xlim=c(0,10000)) + theme(text= element_text(face = 'bold',size=22,colour = 'black'),legend.title = element_blank(),legend.position = 'right')
+
+ggsave(filename = paste0(params$out_prefix,"/Figures/figure4_src/breadth_ecdf.pdf"),width=7,height = 4)
+```
+
+```{r}
+load(paste0(params$out_prefix,"/H3K4me3/spreading/spreading.Rdata"))
+
+# Creat annotation row
+ann_row <- mOL.signature[,c('cluster','mOL.signature'),drop=FALSE]
+
+# Load pseudotime
+pt <- readRDS(file=paste0(params$out_prefix,'H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds'))
+pt <- slingPseudotime(pt)[,1,drop=TRUE]
+ann_row$pseudotime <- pt[rownames(ann_row)]
 
 ########################### OLG lineage
 
 # Sample less cells for faster plotting
 OPCs <- rownames(ann_row[ann_row$cluster == 'OPC',])
-mOLs <- sample(rownames(ann_row[ann_row$cluster == 'mOL',]),1000)
+mOLs <- rownames(ann_row[ann_row$cluster == 'mOL',])
 
 # Select only OPCs and mOLS
 ann_row <- ann_row[c(OPCs,mOLs),]
-ann_row$cluster <- factor(as.character(ann_row$cluster),levels=c("OPC","mOL"))
-ann_row <- ann_row[order(ann_row$pseudotime),]
+#ann_row <- ann_row[sample(rownames(ann_row),1000),]
 
-# Sepcify the colors
-ann_colors                 <- list("cluster"=scales::hue_pal()(5)[c(2,5)])
-names(ann_colors$cluster)  <- levels(ann_row$cluster)
+ann_row <- ann_row[order(ann_row$mOL.signature),]
+
+# Colors
+ann_colors = list('cluster'=CTcolors)
 
 
 # Adapt the color scale
-# breaks         <- seq(from = data.range[1],to= data.range[1] + 0.5 * (data.range[2]-data.range[1]),length.out = 11)
 breaks         <- seq(0,quantile(distances.to.promoters.heatmap,0.99),length.out = 11)
 
 pheatmap(distances.to.promoters.heatmap[rownames(ann_row),17000:30000],
          cluster_cols = FALSE,cluster_rows = FALSE,labels_col = FALSE,labels_row = FALSE,
          annotation_row = ann_row,annotation_colors = ann_colors,
-         viridis::viridis(10),breaks=breaks,fontsize = 22,
-         filename = "../Figure3_src/spreading_heatmap_H3K4me3.png",width = 10,height=10)
+         viridis::viridis(10),breaks=breaks,
+         filename = paste0(params$out_prefix,"/Figures/figure4_src/H3K4me3_spreading.png"),width = 15,height=15)
+
+ann_row <- ann_row[order(ann_row$pseudotime),]
+
+pheatmap(distances.to.promoters.heatmap[rownames(ann_row),17000:30000],
+         cluster_cols = FALSE,cluster_rows = FALSE,labels_col = FALSE,labels_row = FALSE,
+         annotation_row = ann_row,annotation_colors = ann_colors,
+         viridis::viridis(10),breaks=breaks,
+         filename = paste0(params$out_prefix,"/Figures/figure4_src/H3K4me3_spreading_pseudotime.png"),width = 15,height=15)
+
 
 ```
+
+
 
 

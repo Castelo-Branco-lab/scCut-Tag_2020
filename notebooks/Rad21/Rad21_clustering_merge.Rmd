@@ -10,7 +10,7 @@ params:
   window: 25000
 ---
 
-```{r libraries}
+```{r libraries,echo=FALSE}
 library(Seurat,quietly = TRUE,warn.conflicts = FALSE)
 library(gridExtra,quietly = TRUE,warn.conflicts = FALSE)
 library(dplyr,quietly = TRUE,warn.conflicts = FALSE)
@@ -68,13 +68,31 @@ brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 ```
 
 ```{r filter_blacklist}
-brain.merged <- brain.merged[,brain.merged$logUMI > 1]
+brain.merged <- brain.merged[,brain.merged$logUMI > 2]
 
 # Blacklist
 rows.pass             <- GRangesToString(subsetByOverlaps(x = StringToGRanges(rownames(brain.merged)),ranges = blacklist_mm10,invert = TRUE))
 bins.mat              <- brain.merged[[assay]]@counts[rownames(brain.merged) %in% rows.pass,]
 
 brain.merged[[assay]] <- CreateAssayObject(counts = bins.mat)
+```
+
+# Add promoter activity assay
+
+```{r promoter_activity_assay}
+# Fetch promoter coordinates
+promoter.coords <- promoters(EnsDb.Mmusculus.v79)
+promoter.coords <- promoter.coords[promoter.coords$tx_biotype == "protein_coding" | promoter.coords$tx_biotype== "lincRNA"]
+seqlevelsStyle(promoter.coords) <- 'UCSC'
+
+fragments.path <- paste0(params$out_prefix,'merged/',params$antibody,'/fragments.tsv.gz')
+promoter.matrix <- FeatureMatrix(fragments = fragments.path,features = promoter.coords,cells = colnames(brain.merged))
+
+promoters.key <- promoter.coords$tx_name
+names(promoters.key) <- GRangesToString(promoter.coords)
+rownames(promoter.matrix) <- promoters.key[rownames(promoter.matrix)]
+promoter.matrix <- promoter.matrix[rownames(promoter.matrix) != "",]
+brain.merged[['PA']] <- CreateAssayObject(counts = promoter.matrix)
 ```
 
 
@@ -89,24 +107,25 @@ brain.merged <- RunSVD(
   object = brain.merged,
   assay = assay,
   reduction.key = 'LSI_',
-  reduction.name = 'lsi'
+  reduction.name = 'lsi',
+  n=100
 )
   
 brain.merged <- RunUMAP(
   object = brain.merged,
   reduction = 'lsi',
-  dims = 2:30
+  dims = 2:100
 )
 
 brain.merged <- FindNeighbors(
   object = brain.merged,
   reduction = 'lsi',
-  dims = 2:30
+  dims = 2:100
 )
 brain.merged <- FindClusters(
   object = brain.merged,
   algorithm = 3,
-  resolution = 0.3,
+  resolution = 1.2,
   verbose = FALSE
 )
   
@@ -146,7 +165,7 @@ do.call(grid.arrange,p.ls)
 
 ```{r load_RNA_markers}
 markers.Sox10 <- read.csv2(file=paste0(params$out_prefix,'Sox10_RNA/clustering/GFP/markers.csv'),row.names = 1)
-markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
+#markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
 ```
 
 
@@ -156,8 +175,8 @@ markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/st
 ```{r Plot_RNA_modules_projection,fig.width=3,fig.height=3}
 assay='GA'
 
-markers.Sox10$cluster <- paste0('Sox10_',markers.Sox10$cluster)
-markers               <- rbind(markers,markers.Sox10)
+
+markers               <- markers.Sox10
 
 brain.markers.ls <- lapply(unique(markers$cluster),function(x){
   marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
@@ -193,10 +212,14 @@ DimPlot(brain.merged,label=TRUE) + NoLegend()
 
 ```{r Rename_the_clusters,fig.width=3,fig.height=3}
 # Rename the clusters
-brain.merged <- RenameIdents(brain.merged, '0' = 'Astrocytes',
-                                    '1' = 'mOL',
-                                    '2' = 'Unknown',
-                                    '3' = 'Unknown')
+brain.merged <- SetIdent(object = brain.merged,
+                         cells =  colnames(brain.merged[,brain.merged@active.ident %in% c(3:length(unique(brain.merged@active.ident)))]),
+                         value = 'Unknown')
+
+brain.merged <- RenameIdents(brain.merged, '0' = 'mOL',
+                                    '1' = 'Astrocytes',
+                                    '2' = 'OEC')
+
 
 brain.merged$cell_type <- brain.merged@active.ident
 
@@ -226,19 +249,20 @@ write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antib
 
 ```
 
+
 ```{r export_bw}
 samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
 samples <- samples[samples == params$antibody]
 
-fragments.ls <- lapply(names(samples),function(x){
-  fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
-  fragments <- rtracklayer::import(fragments,format = 'bed')
-  fragments
-})
+# fragments.ls <- lapply(names(samples),function(x){
+#    fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
+#    fragments <- rtracklayer::import(fragments,format = 'bed')
+#    fragments
+#  })
+# fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
+# fragments <- sort(fragments)
 
-fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
-fragments <- sort(fragments)
-
+fragments <- rtracklayer::import(con = fragments.path,format = 'bed')
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
@@ -251,8 +275,8 @@ exportBW <- function(object,cluster,fragments){
   new_read <- GRanges(seqnames = chrom.sizes[,1], 
           ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
                           width=1),
-          name = "in_silico_extra_read",
-          score = 0
+          name = rep("in_silico_extra_read",dim(chrom.sizes)[1]),
+          score = rep(0,dim(chrom.sizes)[1])
           )
   
   fragments.x <- fragments$name %in% cells

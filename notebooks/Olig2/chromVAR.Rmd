@@ -1,0 +1,186 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+```{r}
+if (any(!c('DirichletMultinomial','TFBSTools','chromVAR') %in% installed.packages())){
+  BiocManager::install("chromVAR")
+}
+```
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(BSgenome.Mmusculus.UCSC.mm10.masked)
+library(chromVAR)
+library(motifmatchr)
+library(JASPAR2018)
+library(ggplot2)
+library(TFBSTools)
+library(SummarizedExperiment)
+
+
+brain <- readRDS(paste0(params$out_prefix,"/Olig2/clustering/01.clustering.Rds"))
+fragments <- paste0(params$out_prefix,"/merged/Olig2/fragments.tsv.gz")
+
+DimPlot(brain)
+```
+
+```{r}
+peaks <- paste0(params$out_prefix,"/merged/Olig2/macs/narrow/Olig2_summits.bed")
+peaks <- rtracklayer::import(con = peaks)
+peaks <- Extend(peaks,upstream = 200,downstream = 200)
+
+# peaks <- paste0(params$out_prefix,"/merged/Olig2/macs/narrow/Olig2_peaks.narrowPeak")
+# peaks <- rtracklayer::import(con = peaks)
+# Pick top 25 000 peaks ornot
+# peaks <- head(peaks[order(peaks$score,decreasing = TRUE)],25000)
+peaks <- sort(peaks)
+  
+```
+
+```{r}
+brain.peaks <- FeatureMatrix(fragments = fragments,
+                             features = peaks,
+                             cells = colnames(brain))
+
+fragment_counts <- SummarizedExperiment(assays = list(counts = brain.peaks),
+                                        rowRanges = subsetByOverlaps(peaks, StringToGRanges(rownames(brain.peaks)),type = 'equal'),
+                                        colData = brain@meta.data)
+
+fragment_counts <- addGCBias(fragment_counts, genome=BSgenome.Mmusculus.UCSC.mm10)
+
+
+motifs <- getJasparMotifs()
+# olig2 <- motifs$MA0678.1_OLIG2
+
+motif_ix <- matchMotifs(motifs, fragment_counts, genome = BSgenome.Mmusculus.UCSC.mm10)
+
+
+```
+
+
+```{r}
+dev <- computeDeviations(object = fragment_counts,
+                                 annotations = motif_ix)
+
+variability <- computeVariability(dev)
+plotVariability(variability,use_plotly = FALSE)
+
+TFs <- head(variability[order(variability$variability,decreasing = TRUE),],25)
+TFs$Jaspar_id <- unlist(lapply(strsplit(rownames(TFs),"_"),"[",1))
+
+```
+
+# Annotations
+
+
+```{r}
+brain[["peaks"]] <- CreateAssayObject(counts = brain.peaks)
+DefaultAssay(brain) <- "peaks"
+```
+
+```{r}
+pfm <- getMatrixSet(
+  x = JASPAR2018,
+  opts = list(collection="CORE",all_versions = FALSE)
+)
+
+motif.matrix <- CreateMotifMatrix(
+  features = StringToGRanges(rownames(brain), sep = c("-", "-")),
+  pwm = pfm,
+  genome = 'mm10',
+  sep = c("-", "-"),
+  use.counts = FALSE
+)
+
+motif <- CreateMotifObject(
+  data = motif.matrix,
+  pwm = pfm
+)
+
+brain[['peaks']] <- AddMotifObject(
+  object = brain[['peaks']],
+  motif.object = motif
+)
+
+brain <- RegionStats(
+  object = brain,
+  genome = BSgenome.Mmusculus.UCSC.mm10,
+  sep = c("-", "-")
+)
+
+
+# da_peaks <- FindMarkers(
+#   object = brain,
+#   ident.1 = "oligo",
+#   only.pos = TRUE,
+#   test.use = 'LR',
+#   latent.vars = 'nCount_bins_5000',min.pct = 0.001
+# )
+
+
+MotifPlot(
+  object = brain,
+  motifs = head(TFs$Jaspar_id,30),
+  assay = 'peaks'
+)
+```
+
+
+```{r}
+DefaultAssay(brain) <- 'peaks'
+
+brain <- RunChromVAR(
+  object = brain,
+  genome = BSgenome.Mmusculus.UCSC.mm10,
+)
+
+DefaultAssay(brain) <- 'chromvar'
+
+
+head(TFs,20)
+
+# Olig2
+FeaturePlot(brain,features = "MA0678.1",max.cutoff = 5) + ggtitle("Olig2")
+
+# Ctcf
+FeaturePlot(brain,features = "MA0139.1",max.cutoff = 5) + ggtitle("Ctcf")
+
+
+# Sox9
+FeaturePlot(brain,features = "MA0077.1",max.cutoff = 5) + ggtitle("Sox9")
+
+# Sox10
+FeaturePlot(brain,features = "MA0442.2",max.cutoff = 5) + ggtitle("Sox10")
+
+# CCCGCCC motif - e.g. SP4
+FeaturePlot(brain,features = "MA0685.1",max.cutoff = 5) + ggtitle("G-box")
+
+# CCAAT motif - e.g. NFYA
+FeaturePlot(brain,features = "MA0060.3",max.cutoff = 5) + ggtitle("CCAAT box")
+
+# Sox4
+FeaturePlot(brain,features = "MA0867.1",max.cutoff = 5)  + ggtitle("Sox4")
+
+
+
+apply(head(TFs,10),1,function(x){
+  FeaturePlot(brain,features=x['Jaspar_id'],max.cutoff = 5) + ggtitle(x['name']) + scale_color_viridis_c()
+})
+
+FeaturePlot(brain,'logUMI') + scale_color_viridis_c()
+FeaturePlot(brain,'promoter_ratio') + scale_color_viridis_c()
+```
+
+```{r}
+save.image(paste0(params$out_prefix,'/Olig2/chromVAR/chromVAR.Rdata'))
+```
+
+
+

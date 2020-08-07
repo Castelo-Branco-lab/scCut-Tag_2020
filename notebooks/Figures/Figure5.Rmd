@@ -1,0 +1,239 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(viridis)
+```
+
+```{r}
+# order clusters
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+```
+
+```{r}
+brain.Olig2 <- readRDS(paste0(params$out_prefix,"Olig2/clustering/01.clustering.Rds"))
+FeaturePlot(brain.Olig2,feature='logUMI',max.cutoff = 3,min.cutoff = 1.6) + scale_color_viridis_c(option = "B") + ggtitle('')+ NoAxes()
+ggsave(paste0(params$out_prefix,"Figures/figure5_src/Olig2_UMAP_loUMI.png"),width=4,height=4)
+
+DimPlot(brain.Olig2) + scale_color_manual(values=c('oligo'= scales::hue_pal()(9)[3], 'non_oligo' = scales::hue_pal()(9)[1])) + NoLegend() + NoAxes()
+ggsave(paste0(params$out_prefix,"Figures/figure5_src/Olig2_UMAP.png"),width=4,height=4)
+```
+
+
+```{r Plot_H3K4me3_modules_projection_Olig2,fig.width=6,fig.height=6}
+markers <- read.csv2(file=paste0(params$out_prefix,'H3K4me3/clustering/markers.csv'),row.names = 1)
+assay='bins_5000'
+markers_to_use <- unique(markers$cluster)[c(1:4,6)]
+
+
+brain.markers.ls <- lapply(markers_to_use ,function(x){
+  marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
+  marker.genes <- head(marker.genes,500)
+  marker.genes.agg.exp <- Matrix::colSums(brain.Olig2[[assay]]@counts[rownames(brain.Olig2[[assay]]) %in% marker.genes,])
+  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain.Olig2[[assay]]@counts)[names(marker.genes.agg.exp)]
+  return(marker.genes.agg.exp)
+})
+
+names(brain.markers.ls)  <- gsub("-",".",unique(markers_to_use))
+markers.agg.df           <- as.data.frame(do.call(cbind,brain.markers.ls))
+colnames(markers.agg.df) <- gsub(" ",".",colnames(markers.agg.df))
+
+
+brain.Olig2 <- AddMetaData(brain.Olig2,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+p.ls <- lapply(as.character(colnames(markers.agg.df)),function(x){
+  FeaturePlot(brain.Olig2,x,max.cutoff = 0.04,pt.size = 0.3) + scale_color_viridis_c() + ggtitle(paste(x, 'signature (promoters)'))
+  })
+
+p <- do.call(grid.arrange,p.ls)
+p
+ggsave(plot = p,filename = paste0(params$out_prefix,'Figures/figureS7_src/Olig2_UMAP_markers.png'),width=8,height=8)
+```
+
+```{r summary_modules_Olig2}
+colnames(markers.agg.df) <- paste0( gsub("-",".",markers_to_use),' signature')
+markers.agg.df$cluster <- as.character(brain.Olig2[,rownames(markers.agg.df)]@active.ident)
+markers.agg.df.melt    <- reshape2::melt(markers.agg.df)
+
+p3 <- ggplot(data=markers.agg.df.melt) + geom_boxplot(aes(x=variable,y=value,fill=cluster),outlier.shape = NA) + coord_cartesian(ylim=c(0,0.08)) + scale_fill_manual(values = unname(CTcolors[c(1,3)])) + theme_bw() + theme(text=element_text(face = 'bold',size=20),axis.text.x = element_text(angle = 45,hjust=1),legend.title = element_blank()) + xlab("")
+p3
+ggsave(plot = p3,filename = paste0(params$out_prefix,'Figures/figureS7_src/Olig2_signatures_boxplot.png'),width=8,height=5)
+```
+
+
+```{r}
+brain.Rad21 <- readRDS(paste0(params$out_prefix,"Rad21/clustering/01.clustering.Rds"))
+FeaturePlot(brain.Rad21,feature='logUMI',max.cutoff = 3) + scale_color_viridis_c(option = "A") + ggtitle('')+ NoAxes()
+ggsave(paste0(params$out_prefix,"Figures/figure5_src/Rad21_UMAP_loUMI.png"),width=4,height=4)
+
+DimPlot(brain.Rad21) + scale_color_manual(values=CTcolors) + NoLegend() + NoAxes()
+ggsave(paste0(params$out_prefix,"Figures/figure5_src/Rad21_UMAP.png"),width=4,height=4)
+
+```
+
+```{r Plot_H3K4me3_modules_projection_Rad21,fig.width=6,fig.height=6}
+markers <- read.csv2(file=paste0(params$out_prefix,'H3K4me3/clustering/markers.csv'),row.names = 1)
+assay='bins_25000'
+markers_to_use <- unique(markers$cluster)[c(1:4,6)]
+
+
+brain.markers.ls <- lapply(markers_to_use,function(x){
+  marker.genes    <- markers[markers$cluster==x & markers$avg_logFC > 0,"gene"]
+  print(length(marker.genes))
+  marker.genes    <- head(marker.genes,500)
+  overlaping_bins <- GRangesToString(subsetByOverlaps(StringToGRanges(rownames(brain.Rad21)),StringToGRanges(marker.genes)))
+  marker.genes.agg.exp <- Matrix::colSums(brain.Rad21[[assay]]@counts[rownames(brain.Rad21[[assay]]) %in% overlaping_bins,])
+  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain.Rad21[[assay]]@counts)[names(marker.genes.agg.exp)]
+  return(marker.genes.agg.exp)
+})
+
+names(brain.markers.ls)  <- gsub("-",".",markers_to_use)
+markers.agg.df           <- as.data.frame(do.call(cbind,brain.markers.ls))
+colnames(markers.agg.df) <- gsub(" ",".",colnames(markers.agg.df))
+
+
+brain.Rad21 <- AddMetaData(brain.Rad21,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+p.ls <- lapply(as.character(colnames(markers.agg.df)),function(x){
+  FeaturePlot(brain.Rad21,x,pt.size = 0.3,max.cutoff = 0.05) + scale_color_viridis_c() + ggtitle(paste(x, 'signature (promoters)'))
+  })
+
+p <- do.call(grid.arrange,p.ls)
+p
+ggsave(plot = p,filename = paste0(params$out_prefix,'Figures/figureS7_src/Rad21_UMAP_markers.png'),width=8,height=8)
+```
+
+```{r summary_modules_Rad21}
+colnames(markers.agg.df) <- paste0( gsub("-",".",markers_to_use),' signature')
+markers.agg.df$cluster <- as.character(brain.Rad21[,rownames(markers.agg.df)]@active.ident)
+
+markers.agg.df         <- markers.agg.df[markers.agg.df$cluster != "Unknown",]
+markers.agg.df.melt    <- reshape2::melt(markers.agg.df)
+
+p3 <- ggplot(data=markers.agg.df.melt) + geom_boxplot(aes(x=variable,y=value,fill=cluster),outlier.shape = NA) + coord_cartesian(ylim=c(0,0.1)) + scale_fill_manual(values = CTcolors) + theme_bw() + theme(text=element_text(face = 'bold',size=20),axis.text.x = element_text(angle = 45,hjust=1),legend.title = element_blank()) + xlab("")
+p3
+ggsave(plot = p3,filename = paste0(params$out_prefix,'Figures/figureS7_src/Rad21_signatures_boxplot.png'),width=8,height=5)
+```
+
+
+
+# Markers
+
+
+```{r,fig.width=4,fig.height=4}
+library(Gviz)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(GenomicFeatures)
+
+txdb <- TxDb.Mmusculus.UCSC.mm10.knownGene
+bw.files       <- list.files(paste0(params$out_prefix,"/Rad21/clustering/bigwig/"),full.names = TRUE)
+bw.files.K27ac <- list.files(paste0(params$out_prefix,"/H3K27ac/clustering/bigwig/"),full.names = TRUE)
+
+
+bw.files       <- bw.files[c(1,2,3)]
+bw.files.K27ac <- bw.files.K27ac[c(1,2,3)]
+
+samples  <- basename(gsub(".bw","",gsub("cluster_","",bw.files)))
+
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
+marker.regions <- c(
+                    StringToGRanges("chr11:112777525-112828618 ",sep = c(":","-")),              # Sox9
+                     StringToGRanges("chr18:82522111-82591290",sep = c(":","-")),              # Mbp
+                    StringToGRanges("chr1:128557220-128600647",sep = c(":","-")))               # Cxcr4
+                   
+
+
+
+p <- lapply(seq(marker.regions),function(y){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /20) * 20)
+  bw.tracks <- lapply(seq(bw.ls),function(x){
+    track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
+                       from = start(marker.regions[y]), to = end(marker.regions[y]),
+                       type="polygon",showTitle=FALSE,col.axis="black",
+                       background.title="transparent",col.baseline="black",
+                       col.mountain="transparent",fill.mountain=c(CTcolors[samples[x]],CTcolors[samples[x]]),ylim=ylimits)
+    track
+  })
+  
+  
+  
+  myAxisTrack <- GenomeAxisTrack(col="black")
+  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                             stacking = 'full',col='black',fill='red')
+  return(c(myAxisTrack,bw.tracks,grtrack))
+})
+
+pdf(file = paste0(params$out_prefix,"Figures/figure5_src/markers_pseudobulk_Rad21.pdf"),width = 2,height=8)
+sapply(seq(marker.regions),function(x){
+  plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(bw.files)),1))
+})
+dev.off()
+
+
+
+
+```
+
+
+
+
+```{r,fig.width=4,fig.height=4}
+library(Gviz)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(GenomicFeatures)
+
+txdb           <- TxDb.Mmusculus.UCSC.mm10.knownGene
+bw.files       <- list.files(paste0(params$out_prefix,"/Olig2/clustering/bigwig/"),full.names = TRUE)
+
+
+bw.files       <- bw.files[c(1,2)]
+samples        <- c('Astrocytes','mOL') 
+
+bw.ls <- lapply(bw.files, function(x) {x <- rtracklayer::import(x,as="GRanges");x})
+marker.regions <- c(
+                    StringToGRanges("chr3:31130518-31193144",sep = c(":","-")),              # Cldn11
+                    StringToGRanges("chr14:21496603-21544561",sep = c(":","-")))             # Kat6b
+                   
+
+
+
+p <- lapply(seq(marker.regions),function(y){
+  ylimits = c(0,ceiling(max(subsetByOverlaps(do.call('c',bw.ls),marker.regions[y])$score) /20) * 20)
+  bw.tracks <- lapply(seq(bw.ls),function(x){
+    track <- DataTrack(range = bw.ls[[x]],chromosome = as.character(seqnames(marker.regions[y])),
+                       from = start(marker.regions[y]), to = end(marker.regions[y]),
+                       type="polygon",showTitle=FALSE,col.axis="black",
+                       background.title="transparent",col.baseline="black",
+                       col.mountain="transparent",fill.mountain=c(CTcolors[samples[x]],CTcolors[samples[x]]),ylim=ylimits)
+    track
+  })
+  
+  
+  
+  myAxisTrack <- GenomeAxisTrack(col="black")
+  grtrack <- GeneRegionTrack(txdb,showTitle=FALSE,col.axis="black",background.title="transparent",col.baseline="black",
+                             chromosome = as.character(seqnames(marker.regions[y])),from = start(marker.regions[y]), to = end(marker.regions[y]),
+                             stacking = 'full',col='black',fill='red')
+  return(c(myAxisTrack,bw.tracks,grtrack))
+})
+
+pdf(file = paste0(params$out_prefix,"Figures/figure5_src/markers_pseudobulk_Olig2.pdf"),width = 2,height=8)
+sapply(seq(marker.regions),function(x){
+  plotTracks(p[[x]],chromosome=as.character(seqnames(marker.regions[x])),from = start(marker.regions[x]), to = end(marker.regions[x]),
+             scale=5000,min.width=5,min.distance=5,mergeGroups= TRUE,lwd=0.5,col.line='black',window=2000,sizes = c(1,rep(1,length(bw.files)),1))
+})
+dev.off()
+
+
+```

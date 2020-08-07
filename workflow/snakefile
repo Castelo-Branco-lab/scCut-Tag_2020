@@ -39,6 +39,11 @@ rule all:
     expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_list),
     expand("results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = list(set(antibody_list))),
 
+
+    # MEME On merged MACS peaks
+    expand(directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),npeaks=[1000,5000,10000,25000,50000],antibody = ['Olig2','Rad21'],width=[25,50,100,150,250]),
+
+
     # Merged files accross replicates
     expand("results/{sample}/outs/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),
     expand("results/merged/{antibody}/fragments.tsv.gz", antibody = list(set(antibody_list)),sample=samples_list),  # TODO fix
@@ -75,9 +80,12 @@ rule all:
     directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
     directory('results/scATAC_P50/clustering/bam_per_cluster/scATAC/'),
     directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
+    expand(directory('results/H3K4me3/clustering/bam_per_cluster/H3K4me3_{replicate}/'),replicate = ['N1','N2','N3','N4']),
+    
 
     # integration
     'results/Olig2/integration/integrated.Rds',
+    'results/Rad21/integration/integrated.Rds',
     'results/integration/histone_3active/histone_3active_integrated.Rds',
     'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds',
     'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
@@ -94,6 +102,10 @@ rule all:
 
     # H3K4me3 spreading
     "results/H3K4me3/spreading/spreading.Rdata",
+    "results/H3K4me3/spreading/breadth.Rdata",
+
+    # Olig2 chromvar
+    'results/Olig2/chromVAR/chromVAR.Rdata'
 
 ################## PREPROCESSING
 rule bam_to_bw:
@@ -102,7 +114,6 @@ rule bam_to_bw:
     output:
         "results/{sample}/bigwig/all_reads.bw"
     threads: 8
-    conda: '../envs/CT_snakemake.yaml'
     shell:
         "bamCoverage -b {input} -o {output} -p {threads} --minMappingQuality 5 "
         " --binSize 100 --centerReads --smoothLength 500 --normalizeUsing RPKM --ignoreDuplicates"
@@ -114,7 +125,6 @@ rule run_macs_narrow:
         "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     params:
         macs_outdir = "results/{sample}/macs/narrow"
-    conda: '../envs/CT_snakemake.yaml'
     shell:
         "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
         "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
@@ -127,7 +137,6 @@ rule run_macs_broad:
         "results/{sample}/macs/broad/{sample}_peaks.broadPeak"
     params:
         macs_outdir = "results/{sample}/macs/broad"
-    conda: '../envs/CT_snakemake.yaml'
     shell:
         "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
         "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 --broad-cutoff=0.1 --broad 2>&1 "
@@ -155,8 +164,6 @@ rule barcode_statistics_peaks:
         broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt"
     params:
         scripts    = os.path.dirname(workflow.basedir) + '/scripts',
-
-    conda: '../envs/CT_snakemake.yaml'
     shell:
       #  "set +o pipefail; "
         "bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
@@ -181,7 +188,6 @@ rule merge_bam:
         lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
     output:
         "results/merged/{antibody}/possorted_bam.bam"
-    conda: '../envs/CT_snakemake.yaml'
     threads: 8
     shell:
         "samtools merge --threads {threads} {output} {input}" 
@@ -191,7 +197,6 @@ rule merge_fragments:
         lambda wildcards: ['results/' + x + '/outs/fragments.tsv.gz' for x in antibody_dict[wildcards.antibody] ]
     output:
         "results/merged/{antibody}/fragments.tsv.gz"
-    conda: '../envs/CT_snakemake.yaml'
     shell:
         "gunzip -c {input} | sort -k1,1 -k2,2n | bgzip  > {output} && "
         "tabix -p bed {output}" 
@@ -203,13 +208,45 @@ rule add_barcode_fragments:
     output:
         fragments = "results/{sample}/outs/fragments.tsv.gz",
         index     = "results/{sample}/outs/fragments.tsv.gz.tbi"
-    conda: '../envs/CT_snakemake.yaml'
     params:
         script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
     shell:
       #  "set +o pipefail; "
         "python3 {params.script} {input.fragments} {wildcards.sample} | bgzip > {output.fragments}; "
         "tabix -p bed {output.fragments}"
+
+rule download_blacklist:
+  output:
+    "results/mm10.blacklist.bed.gz"
+  params:
+    out_dir = 'results/'
+  shell:
+    "wget -P {params.out_dir} http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/mm10-mouse/mm10.blacklist.bed.gz"
+
+# Motif search
+rule motif_search:
+  input:
+      peaks     = "results/merged/{antibody}/macs/narrow/{antibody}_summits.bed",
+      blacklist = "results/mm10.blacklist.bed.gz"
+  output:
+      meme_out           = directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),
+  params:
+      summits_filtered   = "results/merged/{antibody}/MEME_{width}/summits_filtered_{npeaks}.bed",
+      top_summits        = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.bed",
+      top_summits_padded = "results/merged/{antibody}/MEME_{width}/top_summits_padded_{npeaks}.bed",
+      top_summits_fa     = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.fa",
+      genome_fa          = config['db']['genome_fa'],
+      npeaks             = "{npeaks}",
+      #out                = "results/merged/{antibody}/MEME_{width}/out_{npeaks}",
+  shell:
+#      "set +o pipefail;"
+      "cat {input.peaks} | grep -v -e 'chrM' | sort-bed - | bedops -n 1 - {input.blacklist} > {params.summits_filtered};"
+      "sort -k5gr {params.summits_filtered} | head -{params.npeaks} | sort-bed - > {params.top_summits};"
+      "bedops --range {wildcards.width} -u {params.top_summits} > {params.top_summits_padded};"
+      "bedtools getfasta -fi {params.genome_fa} -bed {params.top_summits_padded} -fo {params.top_summits_fa};"
+      "conda activate meme; " # MEME=5.1.1 env
+      "meme-chip -oc {output.meme_out} -dreme-m 10 -meme-nmotifs 10 {params.top_summits_fa};"
+
 
 
 ####### CELLS SELECTION
@@ -229,8 +266,6 @@ rule cell_selection:
       "results/{sample}/cell_picking/{binwidth}/cells_picked.bw",
       "results/{sample}/cell_picking/{binwidth}/cells_not_picked.bw",
       "results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",
-      
-  conda: '../envs/CT_snakemake.yaml'
   params:
       script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
       out_prefix     = "results/{sample}/cell_picking/{binwidth}/", 
@@ -342,21 +377,21 @@ rule integration_active:
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\" "
     
-######## Olig2
+######## Olig2 and Rad21
 
-rule integration_olig2:
+rule integration_olig2_rad21:
   input:
-    'results/Olig2/clustering/01.clustering.Rds',
-    'results/H3K27ac/clustering/01.clustering.Rds'
+    'results/{antibody}/clustering/01.clustering.Rds',
+    'results/H3K27ac/clustering/01.clustering.Rds',
+    notebook = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/Integration_H3K27ac.Rmd",
   output:
-    'results/Olig2/integration/integrated.Rds',
-    directory('results/Olig2/integration/bigwig/')
+    'results/{antibody}/integration/integrated.Rds',
+    directory('results/{antibody}/integration/bigwig/')
   params:
-    notebook       = os.path.dirname(workflow.basedir) + "/notebooks/Olig2/Integration_H3K27ac.Rmd",
-    report         = CWD + '/results/Olig2/integration/integrated.html',
+    report         = CWD + '/results/{antibody}/integration/integrated.html',
     out_prefix     = CWD + '/results/'
   shell:
-    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
 
 
 ###### H3K4me3 GO analysis
@@ -421,6 +456,38 @@ rule spreading_H3K4me3:
     report     = CWD + "/results/H3K4me3/spreading/spreading.html",
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+rule breadth_H3K4me3:
+  input:
+    # Cellranger peaks.bed file
+    lambda wildcards: ['results/' + x + '/outs/fragments.tsv.gz' for x in antibody_dict[wildcards.antibody] ],
+    'results/Sox10_RNA/clustering/GFP/markers.csv',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/H3K4me3/breadth.Rmd',
+  output:
+    "results/{antibody}/spreading/breadth.Rdata",
+  params:
+    report = CWD + "/results/{antibody}/spreading/breadth.html",
+    out_prefix = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
+
+
+# Olig2 chromvar
+rule chromvar:
+  input:
+    'results/{antibody}/clustering/01.clustering.Rds',
+    'results/merged/{antibody}/fragments.tsv.gz',
+    'results/merged/{antibody}/macs/narrow/{antibody}_summits.bed',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/{antibody}/chromVAR.Rmd',
+  output:
+    'results/{antibody}/chromVAR/chromVAR.Rdata',
+  params:
+    report      = CWD + '/results/{antibody}/chromVAR/chromVAR.html',
+    out_prefix  = CWD + '/results/',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
+
+
 
 
 
@@ -528,7 +595,7 @@ rule integrate_scRNA_seq:
     'results/"Sox10_RNA/integration/scRNA_integrated.Rds'
   params:
     report     = 'results/"Sox10_RNA/integration/scRNA_integrated.html',
-    out_prefix =  CWO + '/results/'
+    out_prefix =  CWD + '/results/'
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
 
