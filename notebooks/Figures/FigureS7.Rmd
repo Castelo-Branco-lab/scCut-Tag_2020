@@ -8,7 +8,11 @@ params:
 
 ```{r}
 library(Seurat)
+library(Signac)
 library(ggplot2)
+library(Matrix)
+library(GenomicRanges)
+library(gridExtra)
 library(reshape2)
 ```
 
@@ -24,83 +28,138 @@ names(CTcolors) <- clusters_order
 ```{r}
 brain.Olig2 <- readRDS(paste0(params$out_prefix,'Olig2/clustering/01.clustering.Rds'))
 brain.Rad21 <- readRDS(paste0(params$out_prefix,'Rad21/clustering/01.clustering.Rds'))
-
-markers <- read.csv2(paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'))
-markers$cluster <- gsub(" ","_",markers$cluster)
-markers.pos <- markers[markers$p_val < 0.05 & markers$avg_logFC > 0,]
 ```
 
-
 ```{r}
-clusters_to_use <- c(
-  "Astrocytes",
-  "Olfactory_ensheathing_cells",
-  "Oligodendrocyte_precursor_cells",
-  "Oligodendrocytes",
-  "Vascular_and_leptomeningeal_cells")
+markers     <- read.csv2(file=paste0(params$out_prefix,"/H3K4me3/clustering/markers.csv"))
+markers.pos <- markers[markers$p_val_adj < 0.05 & markers$avg_logFC > 0,]
 
-clusters_to_use <- gsub("-",".",clusters_to_use)
 ```
 
 ```{r,fig.width=6,fig.height=6}
-assay = "GA"
+DefaultAssay(brain.Olig2) <- 'bins_5000'
 
-plots.ls <- lapply(list(brain.Olig2,brain.Rad21),function(brain){
-
-  brain.markers.ls <- lapply(unique(markers$cluster),function(x){
-    marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
-    marker.genes <- head(marker.genes,100)
-    marker.genes.agg.exp <- Matrix::colSums(brain[[assay]]@data[rownames(brain[[assay]]) %in% marker.genes,])
-    marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain[[assay]]@counts)
-    return(marker.genes.agg.exp)
-  })
-  
-  names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
-  markers.agg.df           <- do.call(cbind,brain.markers.ls)
-  
-  brain <- AddMetaData(brain,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
-  
-  lapply(clusters_to_use,function(x){
-    FeaturePlot(brain,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.3,na.rm=TRUE),pt.size = 0.5) + 
-      scale_color_viridis_c() + ggtitle(gsub("_|\\."," ",x)) + theme(text = element_text(face = 'bold',size=20))
-  })
+marker.signatures <- lapply(unique(markers$cluster),function(x){
+  markers.x      <- markers.pos[markers.pos$cluster == x,]
+  markers.x      <- head(markers.x,500)
+  markers.ranges <- subsetByOverlaps(x      = StringToGRanges(rownames(brain.Olig2)),
+                                     ranges = StringToGRanges(markers.x$X))
+  counts.out <- Matrix::colSums(brain.Olig2[['bins_5000']]@counts[which(rownames(brain.Olig2) %in% GRangesToString(markers.ranges)),])
+  counts.out / 10^brain.Olig2$logUMI[names(counts.out)]
 })
 
-do.call(grid.arrange,c(plots.ls[[1]],ncol=2))
-do.call(grid.arrange,c(plots.ls[[2]],ncol=2))
+names(marker.signatures) <- unique(markers$cluster)
+marker.signatures.df     <- as.data.frame(do.call(cbind,marker.signatures))
+
+brain.Olig2 <- AddMetaData(brain.Olig2,marker.signatures.df)
+
+p.ls <- lapply(colnames(marker.signatures.df),function(x){FeaturePlot(brain.Olig2,
+              x,
+              max.cutoff = ifelse(quantile(brain.Olig2@meta.data[,x],0.9) > 0,
+                                  yes = quantile(brain.Olig2@meta.data[,x],0.9),
+                                  no  = max(brain.Olig2@meta.data[,x])),
+              pt.size = 0.25) + 
+    scale_color_viridis_c()+
+    ggtitle(paste0(x,' signature (promoters)'))
+})
+png(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Olig2_UMAP_markers.png'),width=9,height=9,units = 'in',res=300)
+do.call(grid.arrange,c(p.ls[c(1,2,3,4,6)],ncol=2))
+dev.off()
 ```
 
 ```{r}
-assay = "GA"
+marker.signatures.df$cell_type <- brain.Olig2$cell_type[rownames(marker.signatures.df)]
+marker.signatures.plot <- marker.signatures.df[,c("Astrocytes","mOL","VLMC","OEC","OPC","cell_type")]
 
-brain.ls <- lapply(list(brain.Olig2,brain.Rad21),function(brain){
+ggplot(data = melt(marker.signatures.plot,id.vars = 'cell_type')) + 
+  geom_boxplot(aes(x=variable,y=value,fill=cell_type),outlier.shape=NA) + 
+  theme_bw() + 
+  coord_cartesian(ylim=c(0,0.08)) + 
+  scale_fill_manual(values = c('oligo' = unname(CTcolors[3]),'non_oligo' = unname(CTcolors[1]))) + 
+  theme(axis.text.x = element_text(face = 'bold',size = 16,hjust = 1,angle = 45),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())  
 
-  brain.markers.ls <- lapply(unique(markers$cluster),function(x){
-    marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
-    marker.genes <- head(marker.genes,100)
-    marker.genes.agg.exp <- Matrix::colSums(brain[[assay]]@data[rownames(brain[[assay]]) %in% marker.genes,])
-    marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain[[assay]]@counts)
-    return(marker.genes.agg.exp)
-  })
-  
-  names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
-  markers.agg.df           <- do.call(cbind,brain.markers.ls)
-  
-  brain <- AddMetaData(brain,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+ggsave(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Olig2_signatures_boxplot.png'),width=6,height = 4)
+```
+
+
+
+```{r,fig.width=6,fig.height=6}
+assay                     <- 'bins_25000'
+DefaultAssay(brain.Rad21) <- assay
+
+marker.signatures <- lapply(unique(markers$cluster),function(x){
+  markers.x      <- markers.pos[markers.pos$cluster == x,]
+  markers.x      <- head(markers.x,500)
+  markers.ranges <- subsetByOverlaps(x      = StringToGRanges(rownames(brain.Rad21)),
+                                     ranges = StringToGRanges(markers.x$X))
+  counts.out <- Matrix::colSums(brain.Rad21[[assay]]@counts[which(rownames(brain.Rad21) %in% GRangesToString(markers.ranges)),])
+  counts.out / 10^brain.Rad21$logUMI[names(counts.out)]
 })
 
-brain.ls[[2]] <- brain.ls[[2]][,brain.ls[[2]]@active.ident != 'Unknown']
+names(marker.signatures) <- unique(markers$cluster)
+marker.signatures.df     <- as.data.frame(do.call(cbind,marker.signatures))
 
-lapply(brain.ls,function(x){
-  x <- x@meta.data[,c(clusters_to_use,'cell_type')]
-  x <- reshape2::melt(data = x)
-  ggplot(data=x) + 
-    geom_boxplot(aes(x=variable,y=value,fill=cell_type),outlier.shape = NA) + 
-    coord_cartesian(ylim=c(0,0.05)) + 
-    theme_bw() 
-    
+brain.Rad21 <- AddMetaData(brain.Rad21,marker.signatures.df)
+
+p.ls <- lapply(colnames(marker.signatures.df),function(x){FeaturePlot(brain.Rad21,
+              x,
+              max.cutoff = ifelse(quantile(brain.Rad21@meta.data[,x],0.9) > 0,
+                                  yes = quantile(brain.Rad21@meta.data[,x],0.9),
+                                  no  = max(brain.Rad21@meta.data[,x])),
+              pt.size = 1) + 
+    scale_color_viridis_c() + 
+    ggtitle(paste0(x,' signature (promoters)'))
 })
 
+png(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Rad21_UMAP_markers.png'),width=9,height=9,units = 'in',res=300)
+do.call(grid.arrange,c(p.ls[c(1,2,3,4,6)],ncol=2))
+dev.off()
+```
+
+```{r}
+marker.signatures.df$cell_type <- as.character(brain.Rad21$cell_type[rownames(marker.signatures.df)])
+marker.signatures.df           <- marker.signatures.df[marker.signatures.df$cell_type != "Unknown",]
+
+marker.signatures.plot <- marker.signatures.df[,c("Astrocytes","mOL","OEC","OPC","cell_type")]
+
+
+
+ggplot(data = melt(marker.signatures.plot,id.vars = 'cell_type')) + 
+  geom_boxplot(aes(x=variable,y=value,fill=cell_type),outlier.shape=NA) + 
+  theme_bw() + 
+  coord_cartesian(ylim=c(0,0.08)) + 
+  scale_fill_manual(values = CTcolors) + 
+  theme(axis.text.x = element_text(face = 'bold',size = 16,hjust = 1,angle = 45),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+ggsave(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Rad21_signatures_boxplot.png'),width=6,height = 4)
 
 ```
+
+
+
+```{r}
+integrated <- readRDS(paste0(params$out_prefix,'Olig2/integration/integrated.Rds'))
+
+p1 <- DimPlot(integrated[,integrated$antibody == "Olig2"]) + NoAxes() + NoLegend() + scale_color_manual(values = c('oligo' = unname(CTcolors[3]),'non_oligo' = unname(CTcolors[1])))
+p2 <- DimPlot(integrated[,integrated$antibody == "H3K27ac"]) + NoAxes() + NoLegend() + scale_color_manual(values=CTcolors)
+ggsave(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Olig2_integration_UMAP.png'),width=10,height =5,plot = p1+p2)
+```
+
+
+
+
+```{r}
+integrated <- readRDS(paste0(params$out_prefix,'Rad21/integration/integrated.Rds'))
+
+p1 <- DimPlot(integrated[,integrated$antibody == "Rad21"]) + NoAxes() + NoLegend() + scale_color_manual(values=CTcolors)
+p2 <- DimPlot(integrated[,integrated$antibody == "H3K27ac"]) + NoAxes() + NoLegend() + scale_color_manual(values=CTcolors)
+ggsave(filename = paste0(params$out_prefix,'/Figures/figureS7_src/Rad21_integration_UMAP.png'),width=14,height =7,plot = p1+p2)
+```
+
+
 
