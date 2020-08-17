@@ -65,6 +65,9 @@ brain.ls <- lapply(samples,function(x){
   brain
 })
 
+# Remove cluster 5 from replicate 1 - unreproducible and masks downstream analysis
+brain.ls[[1]] <- brain.ls[[1]][,brain.ls[[1]]@active.ident != 5]
+
 brain.merged <- Reduce(function(x,y) merge(x,y), brain.ls)
 ```
 
@@ -117,12 +120,12 @@ brain.merged <- RunUMAP(
 brain.merged <- FindNeighbors(
   object = brain.merged,
   reduction = 'lsi',
-  dims = 2:80
+  dims = 2:100
 )
 brain.merged <- FindClusters(
   object = brain.merged,
   algorithm = 3,
-  resolution = 0.6,
+  resolution = 0.2,
   verbose = FALSE
 )
   
@@ -197,8 +200,9 @@ lapply(as.character(colnames(markers.agg.df)),function(x){
 
 
 
-```{r,fig.width=8,fig.height=4}
-brain.merged <- RenameIdents(brain.merged,'0'='Astrocytes','1'='mOL','2' = 'OPC','3'= 'VLMC')
+```{r,fig.width=3,fig.height=3}
+brian.merged <- brain.merged[,!brain.merged@active.ident %in% c(4,5)]
+brain.merged <- RenameIdents(brain.merged,'0'='mOL','1'='Astrocytes','2' = 'OEC','3'= 'OPC')
 brain.merged$cell_type <- brain.merged@active.ident
 
 GFP_colors        <- RColorBrewer::brewer.pal(n = 9,name='Set1')[c(4,3)]

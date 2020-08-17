@@ -120,14 +120,9 @@ FeaturePlot(brain.Olig2.new,'logUMI',max.cutoff = 2.5) + scale_color_viridis_c()
 
 ```{r}
 samples <- gsub(" ","",unlist(strsplit(params$samples,",")))
-fragments <- paste0(params$out_prefix,samples,'/outs/fragments.tsv.gz')
+fragments.path <- paste0(params$out_prefix,'merged/',params$antibody,'/fragments.tsv.gz')
 
-fragments.ls <-lapply(fragments,function(x){
-  fragments <- rtracklayer::import(x,format = "bed")  
-})
-
-fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
-fragments <- sort(fragments)
+fragments <- rtracklayer::import(fragments.path,format = "bed")  
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]

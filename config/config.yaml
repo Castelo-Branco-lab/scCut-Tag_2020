@@ -187,5 +187,7 @@ db:
   genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"
 
 
-
+# pip install https://github.com/mirnylab/cooltools/archive/master.zip
+# pip install coolpuppy
+# pip install hic2cool
 

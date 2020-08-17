@@ -215,6 +215,7 @@ DimPlot(brain.merged,label=TRUE) + NoLegend()
 brain.merged <- SetIdent(object = brain.merged,
                          cells =  colnames(brain.merged[,brain.merged@active.ident %in% c(3:length(unique(brain.merged@active.ident)))]),
                          value = 'Unknown')
+brian.merged <- brain.merged[,brain.merged@active.ident !='Unknown']
 
 brain.merged <- RenameIdents(brain.merged, '0' = 'mOL',
                                     '1' = 'Astrocytes',

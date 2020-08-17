@@ -49,7 +49,7 @@ DimPlot(brain.RNA, reduction = "umap",group.by = 'cell_class')
 
 # Remove cells from periphery
 
-```{r,fig.width=18,fig.height=9}
+```{r,fig.width=8,fig.height=4}
 p1 <- DimPlot(brain.H3K4me3,label=TRUE) + NoLegend()
 p2 <- DimPlot(brain.RNA,label=TRUE,group.by='cell_class',repel=TRUE) + NoLegend()
 p1+p2
@@ -73,7 +73,10 @@ DimPlot(brain.H3K4me3.OL)
 
 
 ```{r, fig.width=12,fig.height=12}
-markers <- FindAllMarkers(brain.RNA)
+brain.RNA@active.ident <- brain.RNA$cell_type
+markers                <- FindAllMarkers(brain.RNA)
+markers.pos            <- markers[markers$p_val < 0.05 & markers$avg_logFC > 0.5,]
+
 write.csv2(x = markers, file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
 
 new_ids <- as.character(brain.RNA$cell_class)
@@ -82,10 +85,8 @@ new_ids[new_ids == 'NFOL2'] <- 'NFOL'
 new_ids[new_ids == 'NFOL1'] <- 'NFOL'
 new_ids[new_ids == 'MFOL2'] <- 'MFOL'
 new_ids[new_ids == 'MFOL1'] <- 'MFOL'
-new_ids[new_ids == 'MOL3']  <- 'MOL23'
-new_ids[new_ids == 'MOL2']  <- 'MOL23'
-new_ids[new_ids == 'MOL5']  <- 'MOL56'
-new_ids[new_ids == 'MOL6']  <- 'MOL56'
+#new_ids[new_ids == 'MOL5']  <- 'MOL56'
+#new_ids[new_ids == 'MOL6']  <- 'MOL56'
 
 
 brain.RNA <- SetIdent(brain.RNA,cells = names(new_ids),value = new_ids)
@@ -169,8 +170,9 @@ coembed <- AddMetaData(coembed,cluster.scores)
 
 p.ls <- lapply(colnames(cluster.scores),function(x){
   coembed.x <- coembed[,coembed$antibody == "H3K4me3"] 
-  FeaturePlot(object = coembed.x,features = x,max.cutoff = quantile(coembed.x@meta.data[,x],0.9),min.cutoff = quantile(coembed.x@meta.data[,x],0.1)) + 
-    scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = median(coembed.x@meta.data[,x])) + 
+  FeaturePlot(object = coembed.x,features = x,max.cutoff = quantile(coembed.x@meta.data[,x],0.9),min.cutoff = quantile(coembed.x@meta.data[,x],0.1),pt.size=1) + 
+    #scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = median(coembed.x@meta.data[,x])) + 
+    scale_color_viridis_c() + 
     theme(legend.position = 'bottom')
 })
 

@@ -81,6 +81,7 @@ rule all:
     directory('results/scATAC_P50/clustering/bam_per_cluster/scATAC/'),
     directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
     expand(directory('results/H3K4me3/clustering/bam_per_cluster/H3K4me3_{replicate}/'),replicate = ['N1','N2','N3','N4']),
+    expand('results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}/{cluster}_peaks.broadPeak', cluster = [x.rstrip("_out.bam") for x in os.listdir('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/') if x.endswith("bam")]),
     
 
     # integration
@@ -105,7 +106,10 @@ rule all:
     "results/H3K4me3/spreading/breadth.Rdata",
 
     # Olig2 chromvar
-    'results/Olig2/chromVAR/chromVAR.Rdata'
+    'results/Olig2/chromVAR/chromVAR.Rdata',
+
+    # H3k27ac cicero
+    'results/H3K27ac/cicero/cicero_image.Rdata'
 
 ################## PREPROCESSING
 rule bam_to_bw:
@@ -280,8 +284,9 @@ rule clustering_final:
     notebook       = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/{antibody}_clustering_merge.Rmd",
     RNAmarkers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv',
     GFPmarkers     ='results/Sox10_RNA/clustering/GFP/markers.csv',
-    # peaks_narrow   = 'results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak', # TODL: Fix atac conflict
+    # peaks_narrow   = 'results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak', # TODO: Fix atac conflict
     # peaks_broad    = 'results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak' # TODO: Fix atac conflict
+    # TODO: Olig2 depends on H3K27ac, write lambda function for that 
   output:
     seurat  = "results/{antibody}/clustering/01.clustering.Rds",
     report  = "results/{antibody}/clustering/01.clustering.html",
@@ -301,6 +306,36 @@ rule clustering_final:
 ###########################################################
 ################### DOWNSTREAM ANALYSIS ###################
 ###########################################################
+
+rule call_peaks_bam_per_cluster:
+  input:
+    expand(directory('results/H3K27ac/clustering/bam_per_cluster/{sample}/'),sample = antibody_dict['H3K27ac']),
+    #directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'), # TODO generalize this 
+    #directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
+  output:
+   'results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}/{cluster}_peaks.broadPeak',
+  params:
+    #bam_files = 'results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/{cluster}_out.bam results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/{cluster}_out.bam'
+    bam_files = lambda wildcards: expand("results/H3K27ac/clustering/bam_per_cluster/{sample}/" + wildcards.cluster + "_out.bam",sample = antibody_dict['H3K27ac']),
+    outdir    = 'results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}'
+  shell:
+    "macs2 callpeak -t {params.bam_files}  \
+  -n {wildcards.cluster} \
+  -f BAMPE \
+  -g mm \
+  --qvalue 1e-10 \
+  --outdir {params.outdir} \
+  --broad \
+  --bdg \
+  --max-gap 1000 \
+  --min-length 500 \
+  --broad-cutoff 0.001 \
+  --llocal 1000000 \
+  --slocal 0"
+
+
+
+
 
 rule markers_to_gene:
   input:
@@ -327,10 +362,10 @@ rule metagene:
   threads: 8
   shell:
     "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output.matrix1} -a 10000 -b 10000 -p {threads} &&"
-    "plotHeatmap -m {output.matrix1} -o {output.png1} --sortRegions no --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
+    "plotHeatmap -m {output.matrix1} -o {output.png1} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
     
     "computeMatrix scale-regions -S {input.bw}*.bw -R {input.bed_gene}*.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} &&"
-    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions no --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
 
 
 
@@ -346,9 +381,9 @@ rule metagene_RNA_promoters:
   threads: 8
   shell:
     "computeMatrix reference-point -S {input.bigwig}*.bw -R {input.promoters}*_promoters.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
-    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions no --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
+    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
     "computeMatrix scale-regions -S {input.bigwig}*.bw -R {input.promoters}*_genes.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
-    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions no --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
 
 rule export_bam:
   input:
@@ -488,6 +523,21 @@ rule chromvar:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
 
 
+# H3K27ac cicero
+
+rule cicero:
+  input:
+    'results/{antibody}/clustering/01.clustering.Rds',
+    directory('results/{antibody}/clustering/bam_per_cluster/'),
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/{antibody}/Cicero.Rmd',
+  output:
+    'results/{antibody}/cicero/cicero_image.Rdata',
+    directory('results/{antibody}/cicero/loops/')
+  params:
+    report      = CWD + '/results/{antibody}/cicero/cicero.html',
+    out_prefix  = CWD + '/results/',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
 
 
 

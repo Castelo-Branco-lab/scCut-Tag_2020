@@ -41,16 +41,22 @@ names(CTcolors) <- clusters_order
 
 ```
 
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+
+brain.ls <- lapply(samples,function(x){
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  return(brain)
+})
+
+```
 
 
 
 # Boxplot meta - Figure 1c
 ```{r}
-samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
-
-UMI.ls <- lapply(samples,function(x){
-  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
-  return(brain$logUMI)
+UMI.ls <- lapply(brain.ls,function(x){
+  return(x$logUMI)
 })
 
 UMI.ls <-lapply(UMI.ls,function(x){
@@ -74,7 +80,7 @@ p1 <- ggplot(data=UMI,aes(x=sample,y=UMI)) +
   scale_fill_brewer(palette = 'Set1') + 
   NoLegend() + 
   ylab("Unique reads\nper cell (log10)") + xlab("")
-ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/UMI_boxplot.pdf'),plot = p1,width=8,height = 4)
+ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/UMI_boxplot.pdf'),plot = p1,width=4,height = 4)
 
 p1
 
@@ -90,11 +96,9 @@ print(UMI.summary)
 # Boxplot FrIP -Figure 1d
 
 ```{r}
-samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
 
-FRIP.ls <- lapply(samples,function(x){
-  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
-  return(brain$peak_ratio_MB)
+FRIP.ls <- lapply(brain.ls,function(x){
+  return(x$peak_ratio_MB)
 })
 
 FRIP.ls <-lapply(FRIP.ls,function(x){
@@ -117,7 +121,7 @@ p2 <- ggplot(data=FRIP,aes(x=sample,y=FriP)) +
         axis.title.y = element_text(size=20,face = 'bold')) + 
   scale_fill_brewer(palette = 'Set1') + NoLegend() +
   ylab("Fragments in\npeaks [%]")
-ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/FrIP_boxplot.pdf'),plot = p2,width=8,height = 4)
+ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/FrIP_boxplot.pdf'),plot = p2,width=4,height = 4)
 
 p2
 
@@ -153,6 +157,24 @@ ggsave(filename = paste0(params$out_prefix,'Figures/figure1_src/Nucleosome_histo
 ```
 
 
+```{r}
+samples <- c("H3K4me3","H3K27ac","H3K36me3","H3K27me3")
+
+brain.ls <- lapply(samples,function(x){
+  brain <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
+  return(brain)
+})
+
+GFP_colors <- RColorBrewer::brewer.pal(n = 9,name = 'Set1')[c(4,3)]
+Age_colors <- RColorBrewer::brewer.pal(n = 9,name = 'Set1')[c(1,2)]
+
+p1 <- ggplot(data=df.to.plot) + geom_bar(aes(fill=Group.2,x=Group.1,y=x),position='fill',stat='identity') + scale_fill_manual(values = GFP_colors) + xlab('') + ylab('fraction') + theme(text=element_text(face = 'bold',size=16),axis.text.x = element_text(angle=45,hjust=1),legend.title = element_blank()) + ggtitle("Cell origin")
+p2 <- ggplot(data=df.to.plot) + geom_bar(aes(fill=Group.3,x=Group.1,y=x),position='fill',stat='identity') + scale_fill_manual(values = Age_colors) + xlab('') + ylab('fraction') + theme(text=element_text(face = 'bold',size=16),axis.text.x = element_text(angle=45,hjust=1),legend.title = element_blank()) +ggtitle("Cell origin")
+
+ggsave(p1,filename = paste0(params$out_prefix,'/Figures/figureS2_src/GFP_percentages.png'),width=4,heigh=4)
+ggsave(p2,filename = paste0(params$out_prefix,'/Figures/figureS2_src/Age_percentages.png'),width=4,heigh=4)
+
+```
 
 
 # H3K4me3
@@ -248,7 +270,7 @@ ggplot(data=brain.H3K27ac@meta.data,aes(x=cell_type,y=logUMI)) +
 ```{r}
 x = "H3K36me3"
 brain.H3K36me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
-brain.H3K36me3 <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
+#brain.H3K36me3 <- RenameIdents(brain.H3K36me3,c("Vascular"="VLMC"))
 
 # Colors definition - consistent accross the paper
 CTcolors        <- scales::hue_pal()(9)
@@ -258,7 +280,7 @@ names(CTcolors) <- clusters_order
 p1 <- DimPlot(brain.H3K36me3,pt.size=0.5) + NoAxes() + scale_color_manual(values = CTcolors)
 p1
 ggsave(filename = paste0(params$out_prefix,"Figures/figure1_src/H3K36me3_UMAP.png"),
-       plot = p1,width = 8,height = 8)
+       plot = p1,width = 6,height = 6)
 
 
 brain.H3K36me3$cell_type <- brain.H3K36me3@active.ident

@@ -401,7 +401,7 @@ write.csv(x = cluster.annotations, file=paste0(params$out_prefix,params$antibody
 ```
 
 ```{r peaks_markers}
-brain.merged <- readRDS(file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
+#brain.merged <- readRDS(file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
 fragments    <- paste0(params$out_prefix,"/merged/H3K27ac/fragments.tsv.gz")
 peaks        <- paste0(params$out_prefix,"/merged/H3K27ac/macs/broad/H3K27ac_peaks.broadPeak")
 peaks        <- rtracklayer::import(peaks)
@@ -412,7 +412,7 @@ brain.merged[['peaks']] <- CreateAssayObject(counts = peak.matrix)
 DefaultAssay(brain.merged) <- 'peaks'
 markers <- FindAllMarkers(brain.merged,min.pct = 0.005,logfc.threshold = 0.1)
 
-write.csv2(x = markers,file = paste0(params$out_prefix,"/H3K27ac/clustering/peaks_markers.csv"))
+write.csv2(  x = markers,           file = paste0(params$out_prefix,"/H3K27ac/clustering/peaks_markers.csv"))
 saveRDS(object = brain.merged,      file = paste0(params$out_prefix,params$antibody,"/clustering/01.clustering.Rds"))
 
 ```

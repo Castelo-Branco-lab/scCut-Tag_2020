@@ -1,0 +1,88 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+```{r}
+devtools::install_github("cole-trapnell-lab/cicero-release", ref = "monocle3")
+
+suppressMessages({
+library(cicero);
+library(Seurat);
+library(Signac);
+library(ggplot2);
+library(monocle3)
+})
+```
+
+
+```{r}
+brain <- readRDS(paste0(params$out_prefix,'H3K27ac/clustering/01.clustering.Rds'))
+DimPlot(brain)
+
+
+input_cds <- monocle3::new_cell_data_set(expression_data =  brain[['peaks']]@counts,cell_metadata = brain@meta.data,gene_metadata = data.frame('gene_short_name' = rownames(brain[['peaks']]),row.names=rownames(brain[['peaks']])))
+
+
+```
+
+```{r}
+set.seed(2020)
+
+input_cds <- detect_genes(input_cds)
+input_cds <- input_cds[Matrix::rowSums(exprs(input_cds)) != 0,] 
+    
+input_cds <- detect_genes(input_cds)
+input_cds <- estimate_size_factors(input_cds)
+input_cds <- preprocess_cds(input_cds, method = "LSI")
+input_cds <- reduce_dimension(input_cds, reduction_method = 'UMAP', 
+                              preprocess_method = "LSI")      
+
+plot_cells(input_cds,color_cells_by = 'cell_type')
+
+```
+
+```{r}
+mouse.mm10.genome <- read.table(url("http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes"))[c(1:21),]
+
+umap_coords <- reducedDims(input_cds)$UMAP
+cicero_cds <- make_cicero_cds(input_cds, reduced_coordinates = umap_coords)
+
+conns <- run_cicero(cicero_cds,mouse.mm10.genome) 
+
+dir.create(paste0(params$out_prefix,'/H3K27ac/cicero/'))
+saveRDS(object = conns,file = paste0(params$out_prefix,'/H3K27ac/cicero/connections.Rds'))
+
+
+COACCESS_CUTOFF = 0.1
+conns.pairs <- Pairs(first  = StringToGRanges(conns$Peak1)[which(conns$coaccess > COACCESS_CUTOFF)],
+                     second = StringToGRanges(conns$Peak2)[which(conns$coaccess > COACCESS_CUTOFF)])
+
+rtracklayer::export(object = conns.pairs,format = 'bedpe',con = '~/temp.bedpe')
+
+```
+
+```{r}
+peaks.ls <- lapply(unique(brain@active.ident),function(x){
+  peaks <- rtracklayer::import(paste0(params$out_prefix,'/H3K27ac/clustering/bam_per_cluster/',x,'/',x,'_peaks.broadPeak'))
+})
+
+specific.loops <- lapply(peaks.ls,function(x){
+  pair1.overlaps <- unique(queryHits(findOverlaps(query = conns.pairs@first,subject = x)))
+  pair2.overlaps <- unique(queryHits(findOverlaps(query = conns.pairs@second,subject = x)))
+  both.sides     <- intersect(pair1.overlaps,pair2.overlaps)
+  conns.pairs[both.sides]
+  })
+
+dir.create(paste0(params$out_prefix,'/H3K27ac/cicero/'))
+lapply(seq(specific.loops),function(x){
+  rtracklayer::export(object = specific.loops[[x]], con = paste0(params$out_prefix,'/H3K27ac/cicero/loops/cluster_',unique(brain@active.ident)[x],".bedpe"))
+})
+
+```
+```{r}
+save.image(paste0(params$out_prefix,'/H3K27ac/cicero/cicero_image.Rdata'))
+```
+

@@ -98,6 +98,8 @@ ggsave(p1+p2,filename = paste0(params$out_prefix,'Figures/figure3_src/H3K4me3_RN
 ```{r}
 integrated <- readRDS(paste0(params$out_prefix,"integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds"))
 markers    <- read.csv2(paste0(params$out_prefix,"marques_RNA/clustering/markers_merged_clusters.csv"))
+#markers    <- read.csv2(paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
+
 
 p1 <- DimPlot(integrated[,integrated$antibody=="RNA-seq"])
 p2 <-DimPlot(integrated[,integrated$antibody=='H3K4me3'])
@@ -124,29 +126,53 @@ integrated <- AddMetaData(integrated,cluster.scores)
 
 p.ls <- lapply(colnames(cluster.scores),function(x){
   integrated.x <- integrated[,integrated$antibody == "H3K4me3"] 
-  FeaturePlot(object = integrated.x,features = x,max.cutoff = quantile(integrated.x@meta.data[,x],0.9),min.cutoff = quantile(integrated.x@meta.data[,x],0.1)) + 
+  FeaturePlot(object = integrated.x,features = x,max.cutoff = quantile(integrated.x@meta.data[,x],0.95),min.cutoff = quantile(integrated.x@meta.data[,x],0.1)) + 
     #scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = median(integrated.x@meta.data[,x])) + 
     scale_color_viridis_c() + 
-    theme(legend.position = 'bottom',legend.text = element_text(size=8),legend.key.width = unit(x = 20, units='points'),legend.key.height = unit(x=5, units='points')) + NoAxes() #+ ggtitle("")
+    theme(legend.position = 'bottom',legend.text = element_text(size=8),
+          legend.key.width = unit(x = 30, units='points'),
+          legend.key.height = unit(x=5, units='points')) + NoAxes() #+ ggtitle("")
 })
 
 
 p.ls
+
+RNA.colors        <- c(scales::hue_pal()(length(levels(brain.RNA@active.ident))),"#D3D3D3")
+names(RNA.colors) <- c(levels(brain.RNA@active.ident),"other")
+
+
+p.RNA.ls <- lapply(colnames(cluster.scores),function(x){
+  brain.RNA.x                 <- integrated[,integrated$antibody == 'RNA-seq']
+  brain.RNA.x$current_cluster <- "other"
+  brain.RNA.x$current_cluster[brain.RNA.x@active.ident == x] <- x
+  DimPlot(brain.RNA.x,group.by='current_cluster',pt.size = 1) + 
+    scale_color_manual(values = RNA.colors) + 
+    NoAxes() + 
+    theme(legend.position = 'bottom',
+          legend.text = element_text(size=12),
+          legend.key.width = unit(x = 20, units='points'),
+          legend.key.height = unit(x=5, units='points'))
+})
+
+p.RNA.ls
 ```
 
 
-```{r, fig.width=20,fig.height=4}
-p.RNA <- DimPlot(integrated) + NoLegend() + NoAxes()
+```{r, fig.width=10,fig.height=4}
+p     <- do.call(grid.arrange,c(c(p.ls[c(1,4,11,9,5)],c(p.RNA.ls[c(1,4,11,9,5)])),nrow=2))
 
-p <- do.call(grid.arrange,c(p.ls[c(1,3,4,5,7)],nrow=1))
-ggsave(plot = p,filename = paste0(params$out_prefix,'Figures/figure3_src/Oligo_coembeding_markers.png'),width=15,height=3)
-ggsave(plot=p.RNA,filename = paste0(params$out_prefix,'Figures/figure3_src/Oligo_RNA_UMAP.png'),width=3,height=3)
+p1 <- DimPlot(integrated[,integrated$antibody == "RNA-seq"])+ NoAxes() + NoLegend()
+p2 <- DimPlot(integrated[,integrated$antibody == "H3K4me3"])+ NoAxes() + NoLegend() + scale_color_manual(values = CTcolors)
+p1+p2
+
+ggsave(plot = p,filename = paste0(params$out_prefix,'Figures/figure3_src/Oligo_coembeding_markers.png'),width=14,height=5)
+ggsave(plot= p2+ p1, filename = paste0(params$out_prefix,'Figures/figure3_src/Oligo_RNA_UMAP.png'),width=6,height=3)
 ```
 
 
+######### GGridges plots
 
-
-
+## See figure2 scripts
 
 
 

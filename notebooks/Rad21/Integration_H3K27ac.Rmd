@@ -35,7 +35,7 @@ brain            <- readRDS(paste0(params$out_prefix,params$antibody,"/clusterin
 brain.H3K27ac    <- readRDS(paste0(params$out_prefix,"H3K27ac","/clustering/01.clustering.Rds"))
 
 p1 <- DimPlot(brain.H3K27ac,pt.size = 0.1,label=TRUE) + NoLegend() + ggtitle("H3K27ac")
-p2 <- DimPlot(brain,pt.size = 0.1,label=TRUE) + NoLegend() + ggtitle("Olig2")
+p2 <- DimPlot(brain,pt.size = 0.1,label=TRUE) + NoLegend() + ggtitle("Rad21")
 p1+p2
 ```
 
@@ -96,7 +96,7 @@ integrated <- RunUMAP(
 p3 <- DimPlot(integrated, group.by = 'orig.ident', pt.size = 0.2) + ggplot2::ggtitle("Integrated")
 
 p4 <- DimPlot(integrated[,integrated$antibody == "H3K27ac"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("H3K27ac") + NoLegend()
-p5 <- DimPlot(integrated[,integrated$antibody == "Rad21"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("Olig2") + NoLegend() 
+p5 <- DimPlot(integrated[,integrated$antibody == "Rad21"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("Rad21") + NoLegend() 
   
 
 p3
@@ -129,14 +129,9 @@ FeaturePlot(brain.new,'logUMI',max.cutoff = 2.5) + scale_color_viridis_c()
 
 ```{r}
 samples <- gsub(" ","",unlist(strsplit(params$samples,",")))
-fragments <- paste0(params$out_prefix,samples,'merged/Rad21/fragments.tsv.gz')
+fragments.path <- paste0(params$out_prefix,'merged/',params$antibody,'/fragments.tsv.gz')
 
-fragments.ls <-lapply(fragments,function(x){
-  fragments <- rtracklayer::import(x,format = "bed")  
-})
-
-fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
-fragments <- sort(fragments)
+fragments <- rtracklayer::import(fragments.path,format = "bed")  
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
@@ -170,6 +165,5 @@ lapply(levels(brain.new@active.ident),function(x){
 })
 
 saveRDS(object = integrated,file = paste0(params$out_prefix,params$antibody,'/integration/integrated.Rds'))
-
 ```
 

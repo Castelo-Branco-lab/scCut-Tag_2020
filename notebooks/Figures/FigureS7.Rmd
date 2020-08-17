@@ -1,0 +1,106 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(reshape2)
+```
+
+```{r}
+clusters_order <- c("Astrocytes","VLMC","mOL","Neurons_1","Neurons_2","Neurons_3","OEC","OPC","Microglia")
+
+# Colors definition - consistent accross the paper
+CTcolors        <- scales::hue_pal()(9)
+names(CTcolors) <- clusters_order
+```
+
+
+```{r}
+brain.Olig2 <- readRDS(paste0(params$out_prefix,'Olig2/clustering/01.clustering.Rds'))
+brain.Rad21 <- readRDS(paste0(params$out_prefix,'Rad21/clustering/01.clustering.Rds'))
+
+markers <- read.csv2(paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'))
+markers$cluster <- gsub(" ","_",markers$cluster)
+markers.pos <- markers[markers$p_val < 0.05 & markers$avg_logFC > 0,]
+```
+
+
+```{r}
+clusters_to_use <- c(
+  "Astrocytes",
+  "Olfactory_ensheathing_cells",
+  "Oligodendrocyte_precursor_cells",
+  "Oligodendrocytes",
+  "Vascular_and_leptomeningeal_cells")
+
+clusters_to_use <- gsub("-",".",clusters_to_use)
+```
+
+```{r,fig.width=6,fig.height=6}
+assay = "GA"
+
+plots.ls <- lapply(list(brain.Olig2,brain.Rad21),function(brain){
+
+  brain.markers.ls <- lapply(unique(markers$cluster),function(x){
+    marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
+    marker.genes <- head(marker.genes,100)
+    marker.genes.agg.exp <- Matrix::colSums(brain[[assay]]@data[rownames(brain[[assay]]) %in% marker.genes,])
+    marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain[[assay]]@counts)
+    return(marker.genes.agg.exp)
+  })
+  
+  names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
+  markers.agg.df           <- do.call(cbind,brain.markers.ls)
+  
+  brain <- AddMetaData(brain,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+  
+  lapply(clusters_to_use,function(x){
+    FeaturePlot(brain,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.3,na.rm=TRUE),pt.size = 0.5) + 
+      scale_color_viridis_c() + ggtitle(gsub("_|\\."," ",x)) + theme(text = element_text(face = 'bold',size=20))
+  })
+})
+
+do.call(grid.arrange,c(plots.ls[[1]],ncol=2))
+do.call(grid.arrange,c(plots.ls[[2]],ncol=2))
+```
+
+```{r}
+assay = "GA"
+
+brain.ls <- lapply(list(brain.Olig2,brain.Rad21),function(brain){
+
+  brain.markers.ls <- lapply(unique(markers$cluster),function(x){
+    marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
+    marker.genes <- head(marker.genes,100)
+    marker.genes.agg.exp <- Matrix::colSums(brain[[assay]]@data[rownames(brain[[assay]]) %in% marker.genes,])
+    marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain[[assay]]@counts)
+    return(marker.genes.agg.exp)
+  })
+  
+  names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
+  markers.agg.df           <- do.call(cbind,brain.markers.ls)
+  
+  brain <- AddMetaData(brain,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+})
+
+brain.ls[[2]] <- brain.ls[[2]][,brain.ls[[2]]@active.ident != 'Unknown']
+
+lapply(brain.ls,function(x){
+  x <- x@meta.data[,c(clusters_to_use,'cell_type')]
+  x <- reshape2::melt(data = x)
+  ggplot(data=x) + 
+    geom_boxplot(aes(x=variable,y=value,fill=cell_type),outlier.shape = NA) + 
+    coord_cartesian(ylim=c(0,0.05)) + 
+    theme_bw() 
+    
+})
+
+
+```
+

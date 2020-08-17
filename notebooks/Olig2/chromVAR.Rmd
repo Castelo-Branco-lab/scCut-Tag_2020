@@ -7,8 +7,9 @@ params:
   out_prefix: "~/mount/CT/git_test/results/"
 ---
 ```{r}
-if (any(!c('DirichletMultinomial','TFBSTools','chromVAR') %in% installed.packages())){
-  BiocManager::install("chromVAR")
+bioc_packages <- c('DirichletMultinomial','TFBSTools','chromVAR')
+if (any(!bioc_packages %in% installed.packages())){
+  BiocManager::install(bioc_packages)
 }
 ```
 
@@ -23,6 +24,7 @@ library(JASPAR2018)
 library(ggplot2)
 library(TFBSTools)
 library(SummarizedExperiment)
+library(universalmotif)
 
 
 brain <- readRDS(paste0(params$out_prefix,"/Olig2/clustering/01.clustering.Rds"))
@@ -55,10 +57,16 @@ fragment_counts <- SummarizedExperiment(assays = list(counts = brain.peaks),
 
 fragment_counts <- addGCBias(fragment_counts, genome=BSgenome.Mmusculus.UCSC.mm10)
 
-
+# Load Jaspar motifs
 motifs <- getJasparMotifs()
-# olig2 <- motifs$MA0678.1_OLIG2
 
+# Load Olig2-specific motifs found by MEME
+MEME_Olig2 <- read_meme(file="~/mount/CT/git_test/results/merged/Olig2/MEME_50/out_25000/meme_out/meme.txt")
+names(MEME_Olig2) <- paste0("MEME",c(1:length(MEME_Olig2)),"_Olig2")
+MEME_Olig2 <- convert_motifs(motifs = MEME_Olig2,class = 'TFBSTools-PFMatrix')
+
+# Merge and match motifs
+motifs <- c(motifs,MEME_Olig2)
 motif_ix <- matchMotifs(motifs, fragment_counts, genome = BSgenome.Mmusculus.UCSC.mm10)
 
 
@@ -72,7 +80,7 @@ dev <- computeDeviations(object = fragment_counts,
 variability <- computeVariability(dev)
 plotVariability(variability,use_plotly = FALSE)
 
-TFs <- head(variability[order(variability$variability,decreasing = TRUE),],25)
+TFs <- head(variability[order(variability$variability,decreasing = TRUE),],50)
 TFs$Jaspar_id <- unlist(lapply(strsplit(rownames(TFs),"_"),"[",1))
 
 ```
@@ -87,9 +95,11 @@ DefaultAssay(brain) <- "peaks"
 
 ```{r}
 pfm <- getMatrixSet(
-  x = JASPAR2018,
-  opts = list(collection="CORE",all_versions = FALSE)
+ x = JASPAR2018,
+ opts = list(collection="CORE",all_versions = FALSE)
 )
+
+pfm <- c(pfm,MEME_Olig2)
 
 motif.matrix <- CreateMotifMatrix(
   features = StringToGRanges(rownames(brain), sep = c("-", "-")),
@@ -127,8 +137,9 @@ brain <- RegionStats(
 
 MotifPlot(
   object = brain,
-  motifs = head(TFs$Jaspar_id,30),
-  assay = 'peaks'
+  motifs = head(TFs$name,20),
+  assay = 'peaks',
+  use.names = TRUE
 )
 ```
 
@@ -141,32 +152,43 @@ brain <- RunChromVAR(
   genome = BSgenome.Mmusculus.UCSC.mm10,
 )
 
+
 DefaultAssay(brain) <- 'chromvar'
+
+lapply(rownames(brain)[grep("MEME",rownames(brain))],function(x){
+  FeaturePlot(brain,x,min.cutoff = -1,max.cutoff = 1) + scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = 0) 
+})
+```
+
+
+```{r, eval=FALSE}
+
 
 
 head(TFs,20)
 
+FeaturePlot(brain,features = "MEME1-Olig2",max.cutoff = 5) + ggtitle("Olig2")
+
 # Olig2
-FeaturePlot(brain,features = "MA0678.1",max.cutoff = 5) + ggtitle("Olig2")
+FeaturePlot(brain,features = "MA0678.1-OLIG2",max.cutoff = 5) + ggtitle("Olig2")
 
 # Ctcf
-FeaturePlot(brain,features = "MA0139.1",max.cutoff = 5) + ggtitle("Ctcf")
-
+FeaturePlot(brain,features = "MA0139.1-CTCF",max.cutoff = 5) + ggtitle("Ctcf")
 
 # Sox9
-FeaturePlot(brain,features = "MA0077.1",max.cutoff = 5) + ggtitle("Sox9")
+FeaturePlot(brain,features = "MA0077.1-SOX9",max.cutoff = 5) + ggtitle("Sox9")
 
 # Sox10
-FeaturePlot(brain,features = "MA0442.2",max.cutoff = 5) + ggtitle("Sox10")
+FeaturePlot(brain,features = "MA0442.2-SOX10",max.cutoff = 5) + ggtitle("Sox10")
 
 # CCCGCCC motif - e.g. SP4
-FeaturePlot(brain,features = "MA0685.1",max.cutoff = 5) + ggtitle("G-box")
+FeaturePlot(brain,features = "MA0685.1-SP4",max.cutoff = 5) + ggtitle("G-box")
 
 # CCAAT motif - e.g. NFYA
-FeaturePlot(brain,features = "MA0060.3",max.cutoff = 5) + ggtitle("CCAAT box")
+FeaturePlot(brain,features = "MA0060.3-NFYA",max.cutoff = 5) + ggtitle("CCAAT box")
 
 # Sox4
-FeaturePlot(brain,features = "MA0867.1",max.cutoff = 5)  + ggtitle("Sox4")
+FeaturePlot(brain,features = "MA0867.1-SOX4",max.cutoff = 5)  + ggtitle("Sox4")
 
 
 
@@ -181,6 +203,74 @@ FeaturePlot(brain,'promoter_ratio') + scale_color_viridis_c()
 ```{r}
 save.image(paste0(params$out_prefix,'/Olig2/chromVAR/chromVAR.Rdata'))
 ```
+
+
+```{r, eval=FALSE}
+library(PWMEnrich)
+
+# Fix motifs object
+m <- lapply(MEME_Olig2,function(x){
+  x@strand <- "+-"
+  x
+})
+
+m <- convert_motifs(motifs = m,'PWMEnrich-PWM')
+
+####################
+genome = BSgenome.Mmusculus.UCSC.mm10.masked
+
+mat <- brain[['peaks']]@counts
+mat <- mat[,Matrix::colSums(mat) > 0]
+
+peaks.seq <- getSeq(genome,StringToGRanges(rownames(mat)))
+names(peaks.seq) <- rownames(mat)
+
+THRESHOLD = 20
+l <- apply(mat,2,function(x){
+  x <- x[as.logical(x)]
+  if (sum(x) < THRESHOLD){return(NULL)}
+  x <- names(x)
+  return(peaks.seq[names(peaks.seq) %in% x])
+})
+
+l <- l[!unlist(lapply(l,is.null))]
+
+# l <- apply(mat,2,function(x){
+#   x <- x[as.logical(x)]
+#   x <- names(x)
+#   peaks.seq[names(peaks.seq) %in% x]
+# })
+
+
+# Shuffle to genereate list of background sequences 
+bg.seqs <- stringi::stri_rand_shuffle(peaks.seq)
+bg.seqs <-DNAStringSet(bg.seqs)
+
+# Create backgroung model  
+bg = makeBackground(m, bg.seq = bg.seqs)
+
+l.motifs <- lapply(l, function(x){
+  motifEnrichment(sequences = x,pwms = bg)@res
+})
+
+l.df <- as.data.frame(do.call(rbind,lapply(l.motifs,function(x){x$group.norm})))
+head(l.df)
+brain <- AddMetaData(brain,l.df)
+
+
+lapply(names(MEME_Olig2), function(motif){
+  FeaturePlot(brain[,!is.na(brain@meta.data[,motif])],
+              motif,
+              max.cutoff = quantile(brain[,!is.na(brain@meta.data[,motif])]@meta.data[,motif],0.9)) + scale_color_viridis_c(option = 'C')
+})
+```
+
+
+
+
+
+
+
 
 
 

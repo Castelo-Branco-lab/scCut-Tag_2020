@@ -55,21 +55,51 @@ ggsave(filename = paste0(params$out_prefix,'Figures/figureS2_src/nFeatures.pdf')
 
 ```
 
+```{r,fig.width=9,fig.height=9}
+library(RColorBrewer)
+library(scales)
 
-# GO TERMS
+colors.base <- brewer.pal(n=9, name = "Set1")
+
+col.GFP <- c("GFP+" = colors.base[3],"GFP-" = colors.base[4])
+col.Age <- c("P15"  = colors.base[1],"P25"  = colors.base[2])
+
+  
+p.ls <- lapply(brain.ls,function(x){
+  p1 <- DimPlot(x,group.by = 'GFP', pt.size=0.01) + scale_color_manual(values = col.GFP)  + NoAxes() + theme(legend.position = 'bottom',legend.text = element_text(size = 8,face='bold'))
+  p2 <- DimPlot(x,group.by = 'Age', pt.size=0.01) + scale_color_manual(values = col.Age)  + NoAxes() + theme(legend.position = 'bottom',legend.text = element_text(size = 8,face='bold'))
+  p3 <- DimPlot(x,group.by = 'sample', pt.size=0.01)+ NoAxes() + theme(legend.position = 'bottom',legend.text = element_text(size = 8,face='bold'))
+  return(list(p1,p2,p3))
+})
+
+p.ls <- unlist(p.ls,recursive = FALSE)
+do.call(grid.arrange,c(p.ls,'ncol'=3))
+
+png(filename = paste0(params$out_prefix,'/Figures/figureS2_src/UMAP_GFP_Age_replicates.png'),width = 15,height = 15,units = 'in',res = 300)
+do.call(grid.arrange,c(p.ls,'ncol'=3))
+dev.off()
+```
+
+```{r}
+
+p1 <- ggplot(data=brain.ls[[1]]@meta.data[,c("Age","GFP",'cell_type')]) + 
+  geom_bar(aes(fill = GFP, x = cell_type)) + 
+  theme_bw() + 
+  scale_fill_manual(values = col.GFP) + 
+  theme(text=element_text(size=18,face='bold'),
+        axis.text.x = element_text(angle=45,hjust=1),legend.title = element_blank(),axis.title.x = element_blank()) 
+
+ggsave(filename = paste0(params$out_prefix,"Figures/figureS2_src/GFP_barplot.png"),plot = p1,width = 5,height = 4)
 
 
-```{r,fig.width=4,fig.height=4}
-GO_matrix <- read.csv2(file=paste0(params$out_prefix,'H3K4me3/GO_terms/GO_matrix_markers.csv'),row.names = 1,stringsAsFactors = FALSE)
+p2 <- ggplot(data=brain.ls[[1]]@meta.data[,c("Age","GFP",'cell_type')]) + 
+  geom_bar(aes(fill = Age, x = cell_type)) + 
+  theme_bw() + 
+  scale_fill_manual(values = col.Age) +
+  theme(text=element_text(size=18,face='bold'),
+        axis.text.x = element_text(angle=45,hjust=1),legend.title = element_blank(),axis.title.x = element_blank()) 
 
 
-filterRows <- unique(grep("myelin|astro|oligo|axon|vascul|glia| stem",rownames(GO_matrix)))
-
-heatmap.colors <- colorRampPalette(colors = c("red","white","blue"))(20)
-pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
-
-pdf(file = "../FigureS3_src/GO_terms_heatmap.pdf")
-pheatmap(GO_matrix[filterRows,],cluster_cols = FALSE,cluster_rows = FALSE,color =heatmap.colors)
-
+ggsave(filename = paste0(params$out_prefix,"Figures/figureS2_src/Age_barplot.png"),plot = p2,width = 5,height = 4)
 ```
 
