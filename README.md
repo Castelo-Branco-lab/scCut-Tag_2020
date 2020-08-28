@@ -14,7 +14,7 @@ Code is organized in a snakemake pipeline
 
 Each sequencing run is processed separately with cellranger:
 
-`cellranger-atac count --fastqs=./fastq/ --reference=PATH_TO_CELLRANGER_REFERENCE_MM10 --sample=SEQUNCING_ID --id=SAMPLE_ID`
+    cellranger-atac count --fastqs=./fastq/ --reference=PATH_TO_CELLRANGER_REFERENCE_MM10 --sample=SEQUNCING_ID --id=SAMPLE_ID
 
 
 ## Step 2.
@@ -22,9 +22,10 @@ Each sequencing run is processed separately with cellranger:
 ### Prepare 
 
 cd into folder where you want to do the analyis
-    mkdir scCut_Tag
-    cd scCut_Tag
-### Clone the git repo
+    mkdir scCut-Tag_2020
+    cd scCut-Tag_2020
+
+Clone the git repo
 
     git clone https://github.com/mardzix/scCut-Tag_2020/master
 
@@ -44,7 +45,7 @@ Modify config files in scCut-Tag_2020/config/step2/ to specify path to cellrange
 
 ### Run Snakemake
     snakemake --cores 56 -p
-``
+
 
 
 
