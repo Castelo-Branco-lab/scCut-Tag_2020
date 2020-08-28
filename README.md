@@ -25,12 +25,12 @@ cd into folder where you want to do the analyis
 
 ### Clone the git repo
 
-`git clone https://github.com/mardzix/scCut-Tag_2020/master`
+    `git clone https://github.com/mardzix/scCut-Tag_2020/master`
 
 Create conda environment with all necessary tools installed by:
 
-`conda env create -f scCut-Tag_2020/envs/CT_snakemake.yaml \n`
-`conda env create -f scCut-Tag_2020/envs/meme.yaml `
+    `conda env create -f scCut-Tag_2020/envs/CT_snakemake.yaml `
+    `conda env create -f scCut-Tag_2020/envs/meme.yaml `
 
 Install extra R libraries that are not present in conda or have trouble working:
 TODO 
@@ -42,7 +42,7 @@ Modify config files in scCut-Tag_2020/config/step2/ to specify path to cellrange
 
 
 ### Run Snakemake
-`snakemake --cores 56 -p`
+    `snakemake --cores 56 -p`
 ``
 
 
