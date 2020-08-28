@@ -29,7 +29,7 @@ cd into folder where you want to do the analyis
 
 Create conda environment with all necessary tools installed by:
 
-`conda env create -f scCut-Tag_2020/envs/CT_snakemake.yaml `
+`conda env create -f scCut-Tag_2020/envs/CT_snakemake.yaml \n`
 `conda env create -f scCut-Tag_2020/envs/meme.yaml `
 
 Install extra R libraries that are not present in conda or have trouble working:
