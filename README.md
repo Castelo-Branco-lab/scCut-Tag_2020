@@ -22,6 +22,7 @@ Each sequencing run is processed separately with cellranger:
 ### Prepare 
 
 cd into folder where you want to do the analyis
+    
     mkdir scCut-Tag_2020
     cd scCut-Tag_2020
 
