@@ -5,7 +5,7 @@
 
 This repo contains code needed to generate figures for the paper XY (link doi)
 
-Code is organized in a snakemake pipeline
+## The analysis is performed in two steps:
 
 1. Fastq files are processed using standard cellranger-atac count
 2. Snakemake pipeline contains scripts and R markdown notebooks used for merging of the samples, analysis and figure generation
