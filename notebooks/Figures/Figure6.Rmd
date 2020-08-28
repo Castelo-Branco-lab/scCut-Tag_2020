@@ -10,9 +10,10 @@ params:
 library(ggplot2)
 library(reshape2)
 library(Seurat)
-library(HiCBricks)
+#library(HiCBricks)
 
 dir.create(paste0(params$out_prefix,'/Figures/figure6_src/'))
+
 ```
 
 ```{r,fig.width=8,fig.height=4}
