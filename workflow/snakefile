@@ -1,5 +1,6 @@
 import os
 import sys
+import glob
 
 config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml' 
 configfile: config_file
@@ -76,12 +77,12 @@ rule all:
     expand('results/{antibody}/metagene/metagene_{RNA}_RNA_{genes}.png',antibody = list(set(antibody_list)),RNA=["Sten","Sox10"],genes=['promoters','genes_scaled']),
 
     # Export bam per cluster
-    directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'),
-    directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
     directory('results/scATAC_P50/clustering/bam_per_cluster/scATAC/'),
-    directory('results/Rad21/clustering/bam_per_cluster/Rad21_N1/'),
-    expand(directory('results/H3K4me3/clustering/bam_per_cluster/H3K4me3_{replicate}/'),replicate = ['N1','N2','N3','N4']),
-    expand('results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}/{cluster}_peaks.broadPeak', cluster = [x.rstrip("_out.bam") for x in os.listdir('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/') if x.endswith("bam")]),
+    [expand(directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),antibody = antibody, sample = antibody_dict[antibody]) for antibody in antibody_list],
+
+    # Peak callin bam per cluster
+    [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',antibody = antibody, \
+      cluster=list(set([os.path.basename(x).replace("_out.bam","") for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/*/*.bam')]))) for antibody in antibody_list],
     
 
     # integration
@@ -306,18 +307,14 @@ rule clustering_final:
 ###########################################################
 ################### DOWNSTREAM ANALYSIS ###################
 ###########################################################
-
 rule call_peaks_bam_per_cluster:
   input:
-    expand(directory('results/H3K27ac/clustering/bam_per_cluster/{sample}/'),sample = antibody_dict['H3K27ac']),
-    #directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/'), # TODO generalize this 
-    #directory('results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/'),
+    lambda wildcards: expand(directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),sample = antibody_dict[wildcards.antibody],antibody = wildcards.antibody),
   output:
-   'results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}/{cluster}_peaks.broadPeak',
+   'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
   params:
-    #bam_files = 'results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N1/{cluster}_out.bam results/H3K27ac/clustering/bam_per_cluster/H3K27ac_N2/{cluster}_out.bam'
-    bam_files = lambda wildcards: expand("results/H3K27ac/clustering/bam_per_cluster/{sample}/" + wildcards.cluster + "_out.bam",sample = antibody_dict['H3K27ac']),
-    outdir    = 'results/H3K27ac/clustering/bam_per_cluster/macs/{cluster}'
+    bam_files = lambda wildcards: expand(directory('results/{antibody}/clustering/bam_per_cluster/{sample}/{cluster}_out.bam'),sample = antibody_dict[wildcards.antibody],antibody = wildcards.antibody,cluster = wildcards.cluster),
+    outdir    = 'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}'
   shell:
     "macs2 callpeak -t {params.bam_files}  \
   -n {wildcards.cluster} \
@@ -390,6 +387,7 @@ rule export_bam:
     bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
     table = 'results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv',
   output:
+    #sam_files = directory('results/bam_per_cluster/{sample}/'),
     sam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
   params:
     filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",

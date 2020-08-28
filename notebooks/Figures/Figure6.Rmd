@@ -1,0 +1,189 @@
+---
+title: "R Notebook"
+output: html_notebook
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
+---
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+library(Seurat)
+library(HiCBricks)
+
+dir.create(paste0(params$out_prefix,'/Figures/figure6_src/'))
+```
+
+```{r,fig.width=8,fig.height=4}
+pileup.oligo <- read.table(file="~/mount/CT/git_test/results/hic/FINAL_FILES/ABC_with_Atac/OLIGO/Predictions/filter/pileup_unfilter.txt")
+pileup.mES <- read.table(file="~/mount/CT/git_test/results/hic/FINAL_FILES/ABC_with_Atac/OLIGO/Predictions/filter/pileup_mES_unfilter.txt")
+
+#pileup.oligo <- pileup.oligo[dim(pileup.oligo)[2]:1,]
+
+data.range <- range(c(pileup.mES,pileup.oligo))
+data.range[2] <- data.range[2]
+
+pileup.oligo.ggplot <- melt(as.matrix(pileup.oligo))
+
+
+p1 <- ggplot(data = pileup.oligo.ggplot) + 
+  geom_raster(aes(x=Var1,y=Var2,fill=value)) + 
+  theme_minimal() + 
+  #scale_fill_viridis_c(option = 'B',limits = data.range) + 
+  scale_fill_gradient2(low = 'blue',mid='white',high='red',midpoint = mean(data.range)) +
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        legend.position = 'bottom',
+        legend.key.width = unit(x = 0.5,units = 'in'),
+        legend.title = element_blank(),
+        legend.text = element_text(size=16),
+        ) 
+
+
+pileup.mES.ggplot <- melt(as.matrix(pileup.mES))
+p2 <- ggplot(data = pileup.mES.ggplot) + 
+  geom_raster(aes(x=Var1,y=Var2,fill=value)) + 
+  theme_minimal() + 
+  #scale_fill_viridis_c(option = 'B',limits = data.range) + 
+  scale_fill_gradient2(low = 'blue',mid='white',high='red',midpoint = mean(data.range)) + 
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        legend.position = 'none') 
+
+p2+p1
+
+ggsave(plot = p2+p1,filename = paste0(params$out_prefix,'/Figures/figure6_src/pileups_mES.png'),width=6,height = 4)
+```
+
+# Filtering pileups
+```{r,fig.width=9,fig.height=3}
+pileup.unfilter <- read.table(file=paste0(params$out_prefix,"/hic/FINAL_FILES/ABC_with_Atac/OLIGO/Predictions/filter/pileup_unfilter.txt"))
+
+pileup.single <- read.table(file=paste0(params$out_prefix,"/hic/FINAL_FILES/ABC_with_Atac/OLIGO/Predictions/filter/pileup_filter.txt"))
+
+pileup.double <- read.table(file=paste0(params$out_prefix,"/hic/FINAL_FILES/ABC_with_Atac/OLIGO/Predictions/filter/Rad21/pileup_double_filter.txt"))
+
+pileups <- list(pileup.unfilter,pileup.single,pileup.double)
+pileups <- lapply(pileups,function(x){
+  melt(as.matrix(x))
+})
+
+ 
+data.range <- range(unlist(lapply(pileups,function(x){x$value})))
+
+p.ls <- lapply(pileups,function(x){
+  p2 <- ggplot(data = x) + 
+  geom_raster(aes(x=Var1,y=Var2,fill=value)) + 
+  theme_minimal() + 
+#  scale_fill_viridis_c(option = 'B',limits = data.range) + 
+  scale_fill_gradient2(low = 'blue',mid='white',high='red',midpoint = median(data.range),limits=data.range) + 
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        legend.text = element_text(size=16),
+        legend.key.width = unit(x = 0.5,units = 'in'),
+        legend.title = element_blank(),
+        legend.position = 'bottom') 
+})
+
+
+png(paste0(params$out_prefix,'/Figures/figure6_src/pileups_filtering.png'),width = 9,height = 4,units='in',res=300)
+do.call(grid.arrange,c(p.ls,nrow=1))
+ dev.off()
+getwd()
+```
+
+
+# HiC visualisation
+
+```{r}
+mcool_path <- file.path("~/mount/CT/git_test/results/hic/FINAL_FILES/HiC-files/Ctrl.allValidPairs.mcool")
+Brick_list_mcool_resolutions(mcool = mcool_path)
+
+out_dir = "~/scCT_snakemake_final/hic/bricks/"
+dir.create(out_dir,recursive = TRUE)
+
+Create_many_Bricks_from_mcool(output_directory = out_dir,
+    file_prefix = "mcool_to_Brick", 
+    mcool = mcool_path, 
+    resolution = 5000,
+    experiment_name = "OPC_HiChIP",
+    remove_existing = TRUE)
+
+```
+
+
+```{r}
+Brick_load_data_from_mcool(Brick = My_BrickContainer,
+    mcool = mcool_path,
+    resolution = 5000,
+    cooler_read_limit = 10000000,
+    matrix_chunk = 5000,
+    remove_prior = TRUE,
+    norm_factor = "Vanilla-coverage-square-root")
+```
+
+```{r}
+My_BrickContainer <- load_BrickContainer(project_dir = out_dir)
+
+region <- "11:112603258:113318585"
+region <- "19:9634202:10814153"
+
+Brick_vizart_plot_heatmap(File = file.path('test.pdf'),
+    Bricks = list(My_BrickContainer),
+    x_coords = region,
+    y_coords = region,
+    resolution = 5000,
+    palette = "Reds",
+    width = 10,
+    height = 11,
+    return_object=TRUE,value_cap = 0.9)
+
+Failsafe_log10 <- function(x){
+    x[is.na(x) | is.nan(x) | is.infinite(x)] <- 0
+    return(log10(x+1))
+}
+
+Brick_vizart_plot_heatmap(File = 'test.pdf',
+    Bricks = list(My_BrickContainer),
+    x_coords = region,
+    y_coords = region,
+    resolution = 5000,
+    FUN = Failsafe_log10,
+    value_cap = 0.95,
+    distance = 100,
+    legend_title = "Log10 Hi-C signal",
+    palette = "Reds",
+    width = 15,
+    height = 10,
+    rotate = TRUE,
+    return_object = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
