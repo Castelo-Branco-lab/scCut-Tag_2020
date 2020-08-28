@@ -5,11 +5,10 @@
 
 This repo contains code needed to generate figures for the paper XY (link doi)
 
-Code is organized in snakemake pipelines
+Code is organized in a snakemake pipeline
 
 1. Fastq files are processed using standard cellranger-atac count
-2. First preprocess snakemake pipeline is run to generate bulk tracks, cell barcode statistics and do cells identification
-3. Second snakemake pipeline contains R markdown notebooks used for merging of the samples, analysis and figure generation
+2. Snakemake pipeline contains scripts and R markdown notebooks used for merging of the samples, analysis and figure generation
 
 ## Step 1. 
 
@@ -21,6 +20,8 @@ Each sequencing run is processed separately with cellranger:
 ## Step 2.
 
 ### Prepare 
+
+cd into folder where you want to do the analyis
 
 Clone git repo
 

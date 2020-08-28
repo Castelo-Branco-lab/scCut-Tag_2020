@@ -1,0 +1,11 @@
+name: meme
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - r
+dependencies:
+  - meme=5.0.2
+  - icu=58.2
+prefix: /home/marek/anaconda3/envs/meme
+
