@@ -319,17 +319,17 @@ DoHeatmapMB <- function(object, cells=colnames(object),genes = head(rownames(obj
 # Read data
 x = "H3K4me3"
 brain.H3K4me3 <- readRDS(paste0(params$out_prefix,x,"/clustering/01.clustering.Rds"))
-brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("OPC_2"="OPC","Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
+brain.H3K4me3 <- RenameIdents(brain.H3K4me3,c("Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
 DefaultAssay(brain.H3K4me3) <- 'bins_5000'
 
 markers         <- read.csv2(paste0(params$out_prefix,x,"/clustering/markers.csv"),row.names = 1)
-markers$cluster <- plyr::revalue(markers$cluster,c("OPC_2"="OPC","Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
+markers$cluster <- plyr::revalue(markers$cluster,c("Neurons_1"="Neu_1","Neurons_2"="Neu_2","Neurons_3"="Neu_3"))
 
 clusters_order_heatmap      <- clusters_order
-clusters_order_heatmap[4:6] <- gsub("rons","",clusters_order_heatmap[4:6])
+clusters_order_heatmap <- gsub("rons","",clusters_order_heatmap)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0 & p_val_adj < 0.05) %>% top_n(100, wt=-log(p_val))
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0 & p_val_adj < 0.05) %>% top_n(50, wt=-log(p_val))
 top.markers <- top.markers[which(!top.markers$gene %in% names(table(top.markers$gene)[table(top.markers$gene) > 1])),] # remove non-unique
 
 # Reorder markers
@@ -339,6 +339,7 @@ top.markers         <- top.markers[order(top.markers$cluster),]
 # Reorder cells
 Idents(brain.H3K4me3) <- factor(as.character(Idents(brain.H3K4me3)),levels=clusters_order_heatmap)
 
+
 # create Annotation panels
 row_annotation.df           <- data.frame(markers=top.markers$cluster)
 rownames(row_annotation.df) <- top.markers$gene
@@ -346,6 +347,16 @@ rownames(row_annotation.df) <- top.markers$gene
 col_annotation.df           <- data.frame(clusters=Idents(brain.H3K4me3))
 col_annotation.df$GFP       <- brain.H3K4me3$GFP
 col_annotation.df$Age       <- brain.H3K4me3$Age 
+
+# Filter which cells to plot
+fraction = 0.05
+
+# Select cells randomly
+cells  = sample(colnames(brain.H3K4me3),length(colnames(brain.H3K4me3)) * fraction)
+
+# Select cells based on most signal
+#cells.ls <- lapply(levels(brain.H3K4me3@active.ident),function(x){sort(brain.H3K4me3[,brain.H3K4me3@active.ident == x]$logUMI)})
+#cells    <- names(unlist(lapply(cells.ls,function(x){tail(x,length(x)*fraction)})))
   
 
 
@@ -362,10 +373,6 @@ names(clusterColors$GFP)     <- c("GFP+","GFP-")
 clusterColors$Age            <- brewer.pal(n = 9,name = "Set1")[1:2]
 names(clusterColors$Age)     <- c("P15","P25")
 
-
-# Filter which cells to plot
-fraction = 0.2
-cells  = sample(colnames(brain.H3K4me3),length(colnames(brain.H3K4me3)) * fraction)
 col_annotation.df <- col_annotation.df[as.character(cells),]
 col_annotation.df <- col_annotation.df[do.call(order,col_annotation.df),]
 
