@@ -61,7 +61,7 @@ Modify config files in scCut-Tag_2020/config/step2/ to specify path to cellrange
 ![IGV example](figs/IGV_server_example.png)
 
 
-Change the URL to IGV server in IGV preferences
+#### Change the URL to IGV server in IGV preferences
 IGV -> View -> Preferences -> Advanced -> Data registry url
 
 Change the URL to:
@@ -69,7 +69,9 @@ Change the URL to:
 
 ![IGV setup](figs/IGV.png)
 
+Then, just go to File -> Load from server 
 
+Enjoy!
 
 
 
