@@ -49,9 +49,25 @@ Modify config files in scCut-Tag_2020/config/step2/ to specify path to cellrange
     snakemake --cores 56 -p
 
 
+
+
+
+
+
+
+
 ## We also provide an IGV server with bw tracks for all modifications and cell types
 
-![alt text](figs/IGV.png)
+![IGV example](figs/IGV_server_example.png)
+
+
+Change the URL to IGV server in IGV preferences
+IGV -> View -> Preferences -> Advanced -> Data registry url
+
+Change the URL to:
+    https://storage.googleapis.com/sc_cutandtag/IGV_config/IGV_registry.txt
+
+![IGV setup](figs/IGV.png)
 
 
 
