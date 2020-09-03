@@ -1,4 +1,4 @@
-# single cell in the brain Cut-Tag 2020
+# single cell  Cut-Tag 2020 in the mouse brain
 ### Marek Bartosovic
 ### Goncalo Castelo-Branco lab
 
