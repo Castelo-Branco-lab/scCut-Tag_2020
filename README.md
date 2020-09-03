@@ -1,9 +1,10 @@
-# single cell  Cut-Tag 2020 in the mouse brain
+# single cell Cut&Tag  in the mouse brain
 ### Marek Bartosovic
 ### Goncalo Castelo-Branco lab
 
 
-This repo contains code needed to generate figures for the paper XY (link doi)
+This repo contains code needed to generate figures for the paper https://www.biorxiv.org/content/10.1101/2020.09.02.279703v1
+The code is under development
 
 ## The analysis is performed in two steps:
 
