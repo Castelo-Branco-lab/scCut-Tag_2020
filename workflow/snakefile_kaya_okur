@@ -1,0 +1,187 @@
+samples = ["GSM3536515_K562_K27me3_Rep1",
+           "GSM3536515_K562_K27me3_Rep2",
+           "GSM3536517_K562_K4me2_Rep1",
+           "GSM3536517_K562_K4me2_Rep2",
+           "GSM3536500_H1_K4me2_Rep1",
+           "GSM3536500_H1_K4me2_Rep2",
+           "K562_H3K27me3_iCell8",
+           "K562_H3K4me2_iCell8",
+           "H1_H3K27me3_iCell8"]
+
+rule download:
+  output:
+    "results/other_datasets/kaya_okur/bed_src/GSE124690_RAW.tar"
+  params:
+    url="https://ftp.ncbi.nlm.nih.gov/geo/series/GSE124nnn/GSE124690/suppl/GSE124690_RAW.tar",
+    out_dir="results/other_datasets/kaya_okur/bed_src/"
+  shell:
+    "wget -P {params.out_dir} {params.url}"
+    
+rule untar:
+  input:
+    "results/other_datasets/kaya_okur/bed_src/GSE124690_RAW.tar"
+  output:
+    "results/other_datasets/kaya_okur/bed_src/GSM3536515_K562_K27me3_Rep1.bed.gz",
+    "results/other_datasets/kaya_okur/bed_src/GSM3536515_K562_K27me3_Rep2.bed.gz",
+    "results/other_datasets/kaya_okur/bed_src/GSM3536517_K562_K4me2_Rep1.bed.gz",
+    "results/other_datasets/kaya_okur/bed_src/GSM3536517_K562_K4me2_Rep2.bed.gz",
+    "results/other_datasets/kaya_okur/bed_src/GSM3536500_H1_K4me2_Rep1.bed.gz",
+    "results/other_datasets/kaya_okur/bed_src/GSM3536500_H1_K4me2_Rep2.bed.gz",
+    done="results/other_datasets/kaya_okur/logs/untar_complete.txt"
+  shell:
+    "tar -xvf {input} -C bed_src/ && touch {output.done}"
+
+
+rule merge_and_sort_sc_iCell8_H3K27me3:
+  input:
+    "results/other_datasets/kaya_okur/logs/untar_complete.txt"
+  output:
+    log="results/other_datasets/kaya_okur/logs/merge_complete_K27me3.txt",
+    merge_bed="results/other_datasets/kaya_okur/bed/sorted_K562_H3K27me3_iCell8.bed"
+  params:
+    regex="results/other_datasets/kaya_okur/bed_src/GSM3*K562*H3[kK]27me3*icell*"
+  shell:
+    """set +o pipefail; 
+    N=1; 
+    (ls {params.regex} | while read line;do 
+      gunzip -cd $line | awk -v cell=$N 'BEGIN{{FS=OFS="\t"}} {{a[$1$2$3]++; if(a[$1$2$3] == 1 ) {{print $1,$2,$3,"cell_"cell}} }}' ; 
+      N=$((N+1));
+    done) | sort -k1,1 -k2,2n >> {output.merge_bed} && touch {output.log}
+    """
+
+rule merge_and_sort_sc_iCell8_H3K4me2:
+  input:
+    "results/other_datasets/kaya_okur/logs/untar_complete.txt"
+  output:
+    log="results/other_datasets/kaya_okur/logs/merge_complete_K4me2.txt",
+    merge_bed="results/other_datasets/kaya_okur/bed/sorted_K562_H3K4me2_iCell8.bed"
+  params:
+    regex="results/other_datasets/kaya_okur/bed_src/GSM3*K562*H3[kK]4me2*icell*"
+  shell:
+    """set +o pipefail; 
+    N=1; 
+    (ls {params.regex} | while read line;do 
+      gunzip -cd $line | awk -v cell=$N 'BEGIN{{FS=OFS="\t"}} {{a[$1$2$3]++; if(a[$1$2$3] == 1 ) {{print $1,$2,$3,"cell_"cell}} }}' ; 
+      N=$((N+1));
+    done) | sort -k1,1 -k2,2n >> {output.merge_bed} && touch {output.log}
+    """
+
+rule merge_and_sort_sc_iCell8_H1_H3K27me3:
+  input:
+    "results/other_datasets/kaya_okur/logs/untar_complete.txt"
+  output:
+    log="results/other_datasets/kaya_okur/logs/merge_complete_H1_H3K27me3.txt",
+    merge_bed="results/other_datasets/kaya_okur/bed/sorted_H1_H3K27me3_iCell8.bed"
+  params:
+    regex="results/other_datasets/kaya_okur/bed_src/GSM3*H1*H3[kK]27me3*icell*"
+  shell:
+   """set +o pipefail; 
+   N=1; 
+   (ls {params.regex} | while read line;do 
+     gunzip -cd $line | awk -v cell=$N 'BEGIN{{FS=OFS="\t"}} {{a[$1$2$3]++; if(a[$1$2$3] == 1 ) {{print $1,$2,$3,"cell_"cell}} }}' ; 
+     N=$((N+1));
+   done) | sort -k1,1 -k2,2n >> {output.merge_bed} && touch {output.log}
+   """
+
+rule unzip_bulk:
+  input:
+    "results/other_datasets/kaya_okur/bed_src/{sample}.bed.gz"
+  output:
+    "results/other_datasets/kaya_okur/bed_src/{sample}.bed"
+  shell:
+    """
+    gunzip -cd {input} > {output}
+    """
+
+rule fetch_chromosome_sizes:
+  output:
+    "hg19.chromSizes"
+  shell:
+    "fetchChromSizes hg19 > {output}"
+    
+rule sort_and_unique_bulk:
+  input:
+    "results/other_datasets/kaya_okur/bed_src/{sample}.bed"
+  output:
+    "results/other_datasets/kaya_okur/bed/sorted_{sample}.bed"
+  shell:
+    """
+    awk 'BEGIN{{FS=OFS="\t"}} {{$4 = "read_"NR; a[$1$2$3]++; if(a[$1$2$3] == 1 ) {{ print $1,$2,$3,$4}} }}' {input} | sort -k1,1 -k2,2n > {output} 
+    """
+
+rule compress_bed:
+  input:
+    "results/other_datasets/kaya_okur/bed/sorted_{sample}.bed"
+  output:
+    "results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz",
+  shell:
+    """
+    bgzip {input}
+    """
+
+rule tabix_index:
+  input:
+    "results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz"
+  output:
+    "results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz.tbi"
+  shell:
+    "tabix -p bed {input}"
+
+rule bedToBam_temp:
+  input:
+    bed="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz",
+    index="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz.tbi",
+    chromSizes="hg19.chromSizes",
+  output:
+    "temp/{sample}.bam"
+  shell:
+    """
+    bedToBam -i {input.bed} -g {input.chromSizes} > {output}
+    """
+
+rule indexTempBam:
+  input:
+    "results/other_datasets/kaya_okur/temp/{sample}.bam"
+  output:
+    "results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
+  shell:
+    "samtools index {input}"
+
+rule bam_fix_barcode_tag:
+  input:
+    bam="results/other_datasets/kaya_okur/temp/{sample}.bam",
+    index="results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
+  output:
+    "results/other_datasets/kaya_okur/bam/{sample}.bam"
+  shell:
+    "python3 " + os.path.dirname(workflow.basedir) + "/scripts/fix_barcode_kaya_okur.py -b {input.bam} -o {output}"
+
+rule indexFinalBam:
+  input:
+    "results/other_datasets/kaya_okur/bam/{sample}.bam"
+  output:
+    "results/other_datasets/kaya_okur/bam/{sample}.bam.bai"
+  shell:
+    "samtools index {input}"
+
+
+rule create_bigwig:
+  input:
+    bam="results/other_datasets/kaya_okur/bam/{sample}.bam",
+    index="results/other_datasets/kaya_okur/bam/{sample}.bam.bai"
+  output:
+    "results/other_datasets/kaya_okur/bigwig/{sample}.bw"
+  shell:
+    "bamCoverage -b {input.bam} -o {output}"
+
+rule call_peaks:
+  input:
+    bam="results/other_datasets/kaya_okur/bam/{sample}.bam"
+  output:
+    
+  params:
+    outdir = "macs/{sample}"
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel"
+
+

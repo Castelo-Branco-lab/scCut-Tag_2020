@@ -1,0 +1,20 @@
+config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml' 
+configfile: config_file
+
+samples_dict    = {x: config['samples'][x]['Antibody'] for x in config['samples'].keys()}
+antibody_dict   = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+
+rule all_figures:
+	input:
+		"results/Figures/test.txt"
+
+rule figure1:
+	input:
+		rds       = expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
+		fragments = expand("{cellranger_path}/outs/fragments.tsv.gz", cellranger_path = [config['samples'][x]['cellranger_out']for x in config['samples'].keys()]),
+		markers   = expand("results/{antibody}/clustering/markers.csv",antibody = antibody_dict.keys()),
+		bigiwgs   = directory(expand("results/{antibody}/clustering/bigwig/",antibody = antibody_dict.keys())),
+	output:
+		"results/Figures/test.txt"
+	shell:
+		"touch {output}"
