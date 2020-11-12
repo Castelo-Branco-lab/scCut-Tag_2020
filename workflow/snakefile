@@ -111,6 +111,15 @@ rule all:
 
     # H3k27ac cicero
     'results/H3K27ac/cicero/cicero_image.Rdata'
+    
+    # Grosselin
+    expand("{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['test']),
+    expand("{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA=config['grosselin']['test']),
+    
+    # Kaya-Okur
+    expand("bed/sorted_{s}.bed.gz.tbi",s = config['kaya-okur']['samples']),
+    expand("bam/{s}.bam",s = config['kaya-okur']['samples']),
+    expand("bigwig/{s}.bw",s = config['kaya-okur']['samples']),
 
 ################## PREPROCESSING
 rule bam_to_bw:

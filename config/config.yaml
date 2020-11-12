@@ -183,6 +183,36 @@ ATAC_seq:
       bam_url:              https://cg.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
       bam_index_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai
 
+grosselin:
+  scChiP:
+    - SRR7536860
+    - SRR7536861
+    - SRR7536862
+    - SRR7536863
+    - SRR7536864
+    - SRR7536865
+    - SRR7536866
+    - SRR7536867
+  test:
+    - SRR7536860
+
+  bowtie2_index: /data/ref/bowtie2/GRCh38
+  conda_env: CT_snakemake
+  
+kaya-okur:
+  samples: 
+    - GSM3536515_K562_K27me3_Rep1
+    - GSM3536515_K562_K27me3_Rep2
+    - GSM3536517_K562_K4me2_Rep1
+    - GSM3536517_K562_K4me2_Rep2
+    - GSM3536500_H1_K4me2_Rep1
+    - GSM3536500_H1_K4me2_Rep2
+    - K562_H3K27me3_iCell8
+    - K562_H3K4me2_iCell8
+    - H1_H3K27me3_iCell8
+  
+
+
 db:
   genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"
 
