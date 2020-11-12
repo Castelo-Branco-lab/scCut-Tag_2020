@@ -1,0 +1,107 @@
+***********************************
+CHANGES IN VERSION 0.0.3.3
+
+NEW FEATURES
+
+   o Run in paired-end mode with STAR for genome mapping using "--alignEndsType 
+   EndToEnd --alignIntronMax 1 --alignMatesGapMax 450 --limitGenomeGenerateRAM 
+   25000000000 --outSAMunmapped Within" 
+
+   o Bowtie2 index mapping - only works for Curie Beads now ! :
+   
+        - Bowtie2 index built for each barcode index (B,C,D) containing the 
+        previous & following 4-bp links : (indexes B are 20bp-long (seq + link)
+        , indexes C and D are 24bp-long (link + seq + link))
+        - Indexes are extracted from R2 :
+            -index B : 1-16
+            -index C : 21-36
+            -index D : 41-56
+            
+        -Bowtie2 mapping allowing only 2 mm/indels using "-N 1 -L 8 --rdg 0,7
+        --rfg 0,7 --mp 7,7 --ignore-quals --score-min L,0,-1 -t --no-unal --no-hd"
+        on each index
+        
+        - Join the 3 indexes together to reform complete barcodes
+        
+        - Barcodes are now in the form "BC"[1-96][1-96][1-96]
+
+   o addBarcode_rmDup function first removes PCR duplicates (same R1, same R2,
+   same BC) then removes RT duplicates (different R1, same R2, same BC)
+   
+   o addBarcode_rmDup and rmDup function creates .count files counting the reads
+   in each BC and sorted .bam files at every step 
+   
+   o A 'TMP_DIR' variable has been introduced in the CONFIG files - necessary
+   for the sorting of barcodes in the addBarcode_rmDup function
+   
+   o "add_info_to_log" function to create 
+   SAMPLE_scChIPseq_logs.txt used by future multiqc report
+   
+
+
+BUG_FIXES
+
+   o Barcode count is now correctly calculated (make_count function)
+   
+***********************************
+CHANGES IN VERSION 0.0.3.2
+
+NEW FEATURES
+
+   o Run in paired-end mode, trimming R2 for genome mapping
+using the LENGTH_BARCODE_INDEX parameter
+
+   o Bowtie genome PE mapping using "--try-hard --allow-contain -X 450  
+--chunkmbs 200" outputs maximum # mapped reads
+
+   o New bash addBarcode_rmDup function to remove duplicates
+using R2 end 
+
+
+
+BUG_FIXES
+
+   o Fix bug in matrix counts
+
+
+***********************************
+CHANGES IN VERSION 0.0.3
+
+NEW FEATURES
+
+   o Generate bigWig tracks
+
+   o Update rmdup function to deal with reads orientation
+
+BUG_FIXES
+
+   o Fix bug in matrix counts
+
+
+***********************************
+CHANGES IN VERSION 0.0.2
+
+NEW FEATURES
+
+   o Double filtering of reads per barcode, before and after rm dup.
+     Two different thresholds can be defined in the CONFIG file
+
+BUG_FIXES
+
+   o Fix bug in matrix row names
+
+***********************************
+CHANGES IN VERSION 0.0.1
+
+NEW FEATURES
+
+   o First version of the single-cell ChIP-seq pipeline
+
+SIGNIFICANT USER-VISIBLE CHANGES
+
+   o Add BIN_SIZE in configraiton file
+
+BUG_FIXES
+
+
+
