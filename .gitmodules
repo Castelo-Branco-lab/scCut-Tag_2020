@@ -1,0 +1,6 @@
+[submodule "scChIPseq"]
+	path = scChIPseq
+	url = https://github.com/vallotlab/scChIPseq
+[submodule "scChIPseq_DataEngineering"]
+	path = scChIPseq_DataEngineering
+	url = https://github.com/vallotlab/scChIPseq_DataEngineering
