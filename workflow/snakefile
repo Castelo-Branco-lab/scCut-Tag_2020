@@ -2,6 +2,9 @@ import os
 import sys
 import glob
 
+include: 'snakefile_kaya_okur'
+include: 'snakefile_grosselin'
+
 config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml' 
 configfile: config_file
 
@@ -110,7 +113,7 @@ rule all:
     'results/Olig2/chromVAR/chromVAR.Rdata',
 
     # H3k27ac cicero
-    'results/H3K27ac/cicero/cicero_image.Rdata'
+    'results/H3K27ac/cicero/cicero_image.Rdata',
     
     # Grosselin
     expand("{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['test']),
@@ -160,7 +163,8 @@ rule macs_merged:
     lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
   output:
     "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
-    "results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak"
+    "results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak",
+    "results/merged/{antibody}/macs/narrow/{antibody}_summits.bed"
   params:
     out_narrow = "results/merged/{antibody}/macs/narrow/",
     out_broad  = "results/merged/{antibody}/macs/broad/"
@@ -692,7 +696,10 @@ rule marques_proccess_and_integrate:
 
 rule download_ATAC:  
   output:
-    directory('results/scATAC_P50/data/')
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
   params:
     url = " ".join(list(config['ATAC_seq']['P50']['url'].values()))
   shell:
