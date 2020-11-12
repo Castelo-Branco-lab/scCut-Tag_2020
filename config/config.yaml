@@ -159,8 +159,6 @@ samples:
 general:
   clustering_window: [1000,10000,5000,25000,50000,100000]
   conda_env: CT_snakemake
-  
-
 
 RNA_seq:
   Sox10_RNA:
