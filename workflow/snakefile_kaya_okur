@@ -133,7 +133,7 @@ rule bedToBam_temp:
     index="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz.tbi",
     chromSizes="hg19.chromSizes",
   output:
-    "temp/{sample}.bam"
+    "results/other_datasets/kaya_okur/temp/{sample}.bam"
   shell:
     """
     bedToBam -i {input.bed} -g {input.chromSizes} > {output}

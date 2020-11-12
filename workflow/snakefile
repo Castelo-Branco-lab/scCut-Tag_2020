@@ -116,13 +116,13 @@ rule all:
     'results/H3K27ac/cicero/cicero_image.Rdata',
     
     # Grosselin
-    expand("{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['test']),
-    expand("{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA=config['grosselin']['test']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['test']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA=config['grosselin']['test']),
     
     # Kaya-Okur
-    expand("bed/sorted_{s}.bed.gz.tbi",s = config['kaya-okur']['samples']),
-    expand("bam/{s}.bam",s = config['kaya-okur']['samples']),
-    expand("bigwig/{s}.bw",s = config['kaya-okur']['samples']),
+    expand("results/other_datasets/kaya_okur/bed/sorted_{s}.bed.gz.tbi",s = config['kaya-okur']['samples']),
+    expand("results/other_datasets/kaya_okur/bam/{s}.bam",s = config['kaya-okur']['samples']),
+    expand("results/other_datasets/kaya_okur/bigwig/{s}.bw",s = config['kaya-okur']['samples']),
 
 ################## PREPROCESSING
 rule bam_to_bw:
@@ -539,7 +539,8 @@ rule chromvar:
 rule cicero:
   input:
     'results/{antibody}/clustering/01.clustering.Rds',
-    directory('results/{antibody}/clustering/bam_per_cluster/'),
+#    directory('results/{antibody}/clustering/bam_per_cluster/H3K27ac_N1/'), # Fix this ?
+#    directory('results/{antibody}/clustering/bam_per_cluster/H3K27ac_N2/'), # Fix this ?
     notebook = os.path.dirname(workflow.basedir) + '/notebooks/{antibody}/Cicero.Rmd',
   output:
     'results/{antibody}/cicero/cicero_image.Rdata',
@@ -699,7 +700,7 @@ rule download_ATAC:
     'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
     'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
     'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
-    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam'
   params:
     url = " ".join(list(config['ATAC_seq']['P50']['url'].values()))
   shell:
