@@ -1,0 +1,302 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  config: '../config/config.yaml'
+  out_prefix: "/Users/mareba/mount/CT/git_test/results/" #'results/'
+---
+
+######### FriP analysis ploting
+
+```{r}
+library(ggplot2)
+library(ggthemes)
+
+prefix   <- paste0(params$out_prefix,'other_datasets/frip_analysis/')
+files    <- c('scCT/H3K27me3_N1/','scCT/H3K27me3_N2/','scCT/H3K27me3_N3/','scCT/H3K27me3_N4/','kaya_okur/K562_H3K4me2_iCell8/','kaya_okur/K562_H3K27me3_iCell8/','kaya_okur/H1_H3K27me3_iCell8/','scCT/H3K27me3_cell_lines_1/','scCT/H3K27me3_cell_lines_2/')
+
+group    <- c(rep("scCT",4),rep("Kaya-Okur",3),rep('scCT_cell_lines',2))
+sample   <- gsub("scCT|kaya_okur|/","",files)
+antibody <- c(rep('H3K27me3',4),'H3K4me2',rep('H3K27me3',4))
+
+all.sufix   <- 'all_fragments.txt'
+peaks.sufix <- 'peak_fragments.txt'
+
+barcodes_scCT       <- read.csv(file=paste0(params$out_prefix,'H3K27me3/clustering/bam_per_cluster/cluster_barcode_table.csv'),stringsAsFactors=FALSE)
+barcodes_scCT_lines <- read.csv(file=paste0(params$out_prefix,'H3K27me3_cell_lines/clustering/bam_per_cluster/cluster_barcode_table.csv'),stringsAsFactors=FALSE)
+
+
+files.df        <- data.frame(path=paste(prefix,files,sep=''))
+files.df$all    <- paste(files.df$path,all.sufix,sep='')
+files.df$peak   <- paste(files.df$path,peaks.sufix,sep='')
+files.df$group  <- group
+files.df$sample <- sample
+files.df$antibody <- antibody
+
+
+f.ls <- apply(files.df,1,function(x){
+  x.all  <- read.table(file=x['all'],stringsAsFactors=FALSE)
+  x.peak <- read.table(file=x['peak'],stringsAsFactors=FALSE)
+  x.df   <- merge(x.all,x.peak,by='V2')
+  colnames(x.df) <- c("barcode","all","peak")
+  
+  x.df$ratio <- x.df$peak / x.df$all
+  
+  x.df$group <- x['group']
+  x.df$sample <- x['sample']
+  x.df$antibody <- x['antibody']
+  
+  if(x['group'] == 'scCT'){
+    x.df <- x.df[x.df$barcode %in% as.character(barcodes_scCT[,2]),]
+  }
+  if(x['group'] == 'scCT_cell_lines'){
+    x.df <- x.df[x.df$barcode %in% as.character(barcodes_scCT_lines[,2]),]
+  }
+  
+  x.df
+})
+
+
+
+
+f.merge <- do.call('rbind',f.ls)
+f.merge$sample <- factor(f.merge$sample,levels=unique(f.merge$sample))
+```
+
+
+
+```{r}
+ggplot(data=f.merge) + geom_violin(aes(y=ratio,x=sample,fill=group)) 
+ggplot(data=f.merge) + geom_boxplot(aes(y=all,x=sample,fill=group),outlier.shape = NA) + coord_cartesian(ylim=c(0,25000))
+```
+
+
+################# Fingerprint plot
+
+```{r}
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+
+
+
+samples = c('other_datasets/fingerprint_analysis/scCT_fingerprint.txt',
+            'other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt',
+            'other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt')
+
+
+files.df      <- data.frame(samples=c("scCT","Kaya_okur","Grosselin"))
+files.df$path <- paste0(params$out_prefix,samples)
+
+
+to.plot <- c(c("K562_H3K27me3_iCell8.bam"),
+             c("Astrocytes","Microglia","mOL","Neurons","Neurons","OEC","OPC","VLMC","/outs/possorted_bam.bam"),
+             c("possorted_SRR7536860.bam"))
+
+
+scCT_bulk <- "scCT_all_clusters.bam"
+exp.names <- c('scCT','kaya-okur','Grosselin')
+
+
+scCT_names      <- c('scCT_bulk_N1','scCT_bulk_N2','scCT_bulk_N3','scCT_bulk_N4',colnames(df.ls.cumsum[[1]])[5:length(colnames(df.ls.cumsum[[1]]))])
+kaya_okur_names <- c("H3K27me3_iCell8")
+grosselin_names <- c("grosselin_H3K27me3")
+
+# Read files
+df.ls <-lapply(files.df$path,function(x){
+  NAMES       <- read.table(file=x,nrow=1,stringsAsFactors=F)
+  D           <- as.data.frame(read.table(file=x,skip=2,stringsAsFactors=F))
+  colnames(D) <- NAMES
+  D[,grep(paste(to.plot,collapse="|"),colnames(D)),drop=FALSE]
+})
+
+
+# Make cumsum
+df.ls.cumsum <- lapply(df.ls,function(x){
+  x <- apply(x,2,sort)
+  x <- apply(x,2,function(y){
+    y <- cumsum(y)/sum(y)
+    return(y)
+  })
+  x
+})
+
+colnames(df.ls.cumsum[[1]]) <-  scCT_names
+colnames(df.ls.cumsum[[2]]) <-  kaya_okur_names
+colnames(df.ls.cumsum[[3]]) <-  grosselin_names
+
+# Melt
+df.ls.cumsum.melt <- lapply(df.ls.cumsum,function(x){
+  x <- melt(x)
+  x
+})
+
+# add names
+df.ls.cumsum.melt <- lapply(1:length(df.ls.cumsum),function(x){
+  df.ls.cumsum.melt[[x]]$group <- exp.names[x]
+  df.ls.cumsum.melt[[x]]
+})
+
+df      <- do.call(rbind,df.ls.cumsum.melt)
+
+# Fix names for plotting
+df[grep('scCT_bulk_N',df$Var2),'group']   <- 'scCT_merged_replicate'
+df[df$group=='scCT','group']               <- 'scCT_single_cluster'
+
+#antibody column
+df$antibody <- "H3K27me3"
+df[grep("H3K4me2",df$Var2),'antibody'] <- "H3K4me2"
+
+
+df$Var2 <- basename(as.character(df$Var2))
+df$Var2 <- gsub(".bam","",df$Var2)
+
+
+ggplot(data=df) + geom_line(aes(x=Var1,y=value,col=group,group=Var2,lty=antibody)) + 
+  coord_cartesian(xlim=c(200000,max(df$Var1))) + 
+  theme_few()
+
+```
+
+
+
+
+
+
+
+
+
+################## PCA
+```{r, fig.width=5,fig.height=5}
+library(reticulate)
+library(ggplot2)
+library(ggrepel)
+library(ggthemes)
+
+options(width=300)
+
+np <- import("numpy")
+npz1 <- np$load(file = paste0(params$out_prefix,"other_datasets/PCA/PCA_table_cell_lines.npz"))
+```
+
+# Cell lines
+```{r}
+d <- npz1$f[['matrix']]
+colnames(d) <- npz1$f[['labels']]
+
+#d <- d[order(matrixStats::rowVars(t(apply(d,1,function(x){x/sum(x)}))),decreasing = TRUE),]
+#d <- head(d,400)
+
+d.pca <-prcomp(na.omit(d),scale=TRUE,center=TRUE)
+plot.labels <- c("sc-3T3",
+                 "sc-mES_1",
+                 "sc-mES_2",
+                 "sc-mES_3",
+                 "sc-Oli-neu_1",
+                 "sc-Oli-neu_2",
+                 "bulk-Oli-neu",
+                 "bulk-mESC_rep1",
+                 "bulk-mESC_rep2",
+                 "bulk-3T3_rep1",
+                 "bulk-3T3_rep2")
+
+
+pca.plot        <- as.data.frame(d.pca$rotation)
+pca.plot$group  <- c(rep("single_cell",6),rep("bulk",5))
+pca.plot$sample <- plot.labels
+
+p <- ggplot(data = pca.plot, aes(x = PC1,y = PC2,label = sample)) + 
+  geom_point(aes(color = group),size=3) + 
+  geom_text_repel(force=20,segment.size=0.2) +
+  theme_few() + theme(legend.position = "None")
+
+p 
+
+d.plot <- cor(d)
+colnames(d.plot) <- plot.labels
+rownames(d.plot) <- plot.labels
+
+
+b <- seq(from=-1,to=1,by=0.05)
+pheatmap::pheatmap(d.plot,color = colorRampPalette(colors = c("blue","white","red"))(length(b)),breaks = b)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+library(reticulate)
+library(ggplot2)
+library(ggthemes)
+library(ggrepel)
+library(pheatmap)
+
+set.seed(2020)
+np <- import("numpy")
+npz1 <- np$load(file = paste0(params$out_prefix,"other_datasets/PCA/PCA_table_brain.npz"))
+
+d <- npz1$f[['matrix']]
+colnames(d) <- npz1$f[['labels']]
+
+#d <- d[,-grep("OEC",colnames(d))]
+d <- d[order(matrixStats::rowVars(t(apply(d,1,function(x){x/sum(x)}))),decreasing = TRUE),]
+d <- head(d,200)
+
+d.pca <-prcomp(na.omit(d),scale=TRUE,center=TRUE)
+plot.labels <- c("sc-Astrocytes",
+                 "sc-Microglia",
+                 "sc-Oligodendrocytes",
+                 "sc-Neurons_1",
+                 "sc-Neurons_3",
+                 "sc-OEC",
+                 "sc-OPC",
+                 "sc-VLMC",
+                 "bulk-Neurons",
+                 "bulk-Microglia",
+                 "bulk-OPC")
+                 
+                 
+pca.plot        <- as.data.frame(d.pca$rotation)
+pca.plot$group  <- c(rep("single_cell",8),rep("bulk",3))
+pca.plot$sample <- plot.labels
+
+p <- ggplot(data = pca.plot, aes(x = PC1,y = PC2,label = sample)) + 
+  geom_point(aes(color = group),size=3) + 
+  geom_text_repel(force=5,point.padding=0.2) +
+  coord_cartesian(xlim=c(-0.5,0.6),ylim=c(-0.6,0.1)) + 
+  theme(legend.position = "None", 
+        plot.background = element_blank(),
+        panel.background = element_blank(),
+        axis.line=element_line(),
+        axis.ticks.length = unit(6,'points')) +
+  scale_color_
+p  
+#ggsave(plot = p,filename = "PCA_sc_bulk.png",width=5,height=5)
+
+d.cor <- cor(d)
+colnames(d.cor) <- plot.labels
+rownames(d.cor) <- plot.labels
+
+b <- seq(from=-1,to=1,by=0.05)
+pheatmap::pheatmap(d.cor,color = colorRampPalette(colors = c("blue","white","red"))(length(b)),breaks = b)
+```
+
+
+
+
+
+
+
+
+
+
