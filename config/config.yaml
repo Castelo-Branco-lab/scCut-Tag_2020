@@ -81,6 +81,31 @@ samples:
     GFP: GFP-
     Age: P15
     Antibody: H3K27me3
+  
+  H3K27me3_cell_lines_1: 
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB006
+    clustering_params: 
+      min_reads_log10: 3.5
+      max_reads_log10: 5.5
+      min_peaks_ratio: 0.05
+      max_peaks_ratio: 0.75
+    GFP: GFP-
+    Age: P15
+    Antibody: H3K27me3_cell_lines
+
+  H3K27me3_cell_lines_2: 
+    cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB007
+    clustering_params: 
+      min_reads_log10: 3.5
+      max_reads_log10: 5.5
+      min_peaks_ratio: 0.05
+      max_peaks_ratio: 0.75
+    GFP: GFP-
+    Age: P15
+    Antibody: H3K27me3_cell_lines
+  
+  
+    
 
   H3K27ac_N1:
     cellranger_out: /data/proj/GCB_MB/CT/CT_19_001
@@ -180,23 +205,25 @@ ATAC_seq:
       fragments_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz
       fragments_index_url:  https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz.tbi
       metadata_url:         https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_singlecell.csv
-      bam_url:              https://cg.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
+      bam_url:              https://cg.10xgenomics.comamples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
       bam_index_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai
 
 grosselin:
-  scChiP:
+  scChIP:
     - SRR7536860
-    - SRR7536861
-    - SRR7536862
-    - SRR7536863
-    - SRR7536864
-    - SRR7536865
-    - SRR7536866
-    - SRR7536867
+#    - SRR7536861
+#    - SRR7536862
+#    - SRR7536863
+#    - SRR7536864
+#    - SRR7536865
+#    - SRR7536866
+#    - SRR7536867
   test:
     - SRR7536860
 
-  bowtie2_index: /data/ref/bowtie2/GRCh38
+  bowtie2_index: 
+    hg38: /data/ref/bowtie2/GRCh38
+    mm10: /data/proj/GCB_MB/reference/bowtie2_index/mm10/mm10
   conda_env: CT_snakemake
   
 kaya-okur:
@@ -211,10 +238,33 @@ kaya-okur:
     - K562_H3K4me2_iCell8
     - H1_H3K27me3_iCell8
   
+bonev:
+  samples:
+    CN_H3K27me3: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96107/suppl/GSE96107_CN_H3K27me3.bw
+    CN_H3K4me3: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96107/suppl/GSE96107_CN_H3K4me3.bw
 
+matsuda:
+  samples:
+    microglia_H3K4me3: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2800nnn/GSM2800522/suppl/GSM2800522_Microglia_H3K4me3_ChIP-seq.bw
+    microglia_H3K27me3: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2800nnn/GSM2800523/suppl/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw
+
+zhao:
+  samples:
+    OPCs_H3K4me3: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3214nnn/GSM3214323/suppl/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.wig.gz
+
+mESC:
+  samples:
+    rep1: https://www.encodeproject.org/files/ENCFF359LIR/@@download/ENCFF359LIR.bam
+    rep2: https://www.encodeproject.org/files/ENCFF129XSB/@@download/ENCFF129XSB.bam
+    
+3T3:
+  samples:
+    rep1: SRR9889940
+    rep2: SRR9889941
 
 db:
   genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"
+  genes_gtf: "/data/ref/cellranger-atac/refdata-cellranger-atac-mm10-1.2.0/genes/genes.gtf"
 
 
 # pip install https://github.com/mirnylab/cooltools/archive/master.zip

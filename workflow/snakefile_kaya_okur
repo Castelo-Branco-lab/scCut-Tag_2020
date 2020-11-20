@@ -1,13 +1,3 @@
-samples = ["GSM3536515_K562_K27me3_Rep1",
-           "GSM3536515_K562_K27me3_Rep2",
-           "GSM3536517_K562_K4me2_Rep1",
-           "GSM3536517_K562_K4me2_Rep2",
-           "GSM3536500_H1_K4me2_Rep1",
-           "GSM3536500_H1_K4me2_Rep2",
-           "K562_H3K27me3_iCell8",
-           "K562_H3K4me2_iCell8",
-           "H1_H3K27me3_iCell8"]
-
 rule download:
   output:
     "results/other_datasets/kaya_okur/bed_src/GSE124690_RAW.tar"
@@ -28,8 +18,10 @@ rule untar:
     "results/other_datasets/kaya_okur/bed_src/GSM3536500_H1_K4me2_Rep1.bed.gz",
     "results/other_datasets/kaya_okur/bed_src/GSM3536500_H1_K4me2_Rep2.bed.gz",
     done="results/other_datasets/kaya_okur/logs/untar_complete.txt"
+  params:
+    out="results/other_datasets/kaya_okur/bed_src/"
   shell:
-    "tar -xvf {input} -C bed_src/ && touch {output.done}"
+    "tar -xvf {input} -C {params.out} && touch {output.done}"
 
 
 rule merge_and_sort_sc_iCell8_H3K27me3:
@@ -95,7 +87,7 @@ rule unzip_bulk:
 
 rule fetch_chromosome_sizes:
   output:
-    "hg19.chromSizes"
+    "results/other_datasets/kaya_okur/hg19.chromSizes"
   shell:
     "fetchChromSizes hg19 > {output}"
     
@@ -131,39 +123,24 @@ rule bedToBam_temp:
   input:
     bed="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz",
     index="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz.tbi",
-    chromSizes="hg19.chromSizes",
+    chromSizes="results/other_datasets/kaya_okur/hg19.chromSizes",
   output:
-    "results/other_datasets/kaya_okur/temp/{sample}.bam"
+    bam="results/other_datasets/kaya_okur/temp/{sample}.bam",
+    index="results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
   shell:
     """
-    bedToBam -i {input.bed} -g {input.chromSizes} > {output}
+    bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {ouptut.bam}
     """
-
-rule indexTempBam:
-  input:
-    "results/other_datasets/kaya_okur/temp/{sample}.bam"
-  output:
-    "results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
-  shell:
-    "samtools index {input}"
 
 rule bam_fix_barcode_tag:
   input:
     bam="results/other_datasets/kaya_okur/temp/{sample}.bam",
     index="results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
   output:
-    "results/other_datasets/kaya_okur/bam/{sample}.bam"
+    bam="results/other_datasets/kaya_okur/bam/{sample}.bam",
+    index="results/other_datasets/kaya_okur/bam/{sample}.bam.bai"
   shell:
-    "python3 " + os.path.dirname(workflow.basedir) + "/scripts/fix_barcode_kaya_okur.py -b {input.bam} -o {output}"
-
-rule indexFinalBam:
-  input:
-    "results/other_datasets/kaya_okur/bam/{sample}.bam"
-  output:
-    "results/other_datasets/kaya_okur/bam/{sample}.bam.bai"
-  shell:
-    "samtools index {input}"
-
+    "python3 " + os.path.dirname(workflow.basedir) + "/scripts/fix_barcode_kaya_okur.py -b {input.bam} -o {output.bam} && samtools index {output.bam}"
 
 rule create_bigwig:
   input:
@@ -174,14 +151,39 @@ rule create_bigwig:
   shell:
     "bamCoverage -b {input.bam} -o {output}"
 
-rule call_peaks:
+rule plot_fingerprint_kaya_okur:
+  input:
+    expand("results/other_datasets/kaya_okur/bam/{s}.bam",s = config['kaya-okur']['samples'])
+  output:
+    "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt", 
+  threads: 16
+  shell:
+    "plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input} -p 16"
+
+rule call_peaks_kaya_okur_FrIP:
   input:
     bam="results/other_datasets/kaya_okur/bam/{sample}.bam"
   output:
-    
+    directory("results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/")
   params:
-    outdir = "macs/{sample}"
+    outdir = "results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/",
+    SRA    = "{sample}"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel"
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --max-gap 2500 --nolambda " # --slocal 1000000 --llocal 1000000"
+
+rule intersect_kaya_okur_fragments_with_peaks:
+  input:
+    peaks=directory("results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/"),
+    fragments="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz",
+  output:
+    all_fragments  = "results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",
+    peak_fragments = "results/other_datasets/frip_analysis/kaya_okur/{sample}/peak_fragments.txt",
+  params:
+      sample = "{sample}"
+  shell:
+    """
+    zcat {input.fragments} | cut -f4 | sort | uniq -c > {output.all_fragments} 
+    bedtools intersect -a {input.fragments} -b {input.peaks}{params.sample}_peaks.narrowPeak -wa | cut -f4 | sort | uniq -c > {output.peak_fragments}
+    """
 
 

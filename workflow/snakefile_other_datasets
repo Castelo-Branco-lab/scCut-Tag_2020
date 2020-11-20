@@ -1,0 +1,144 @@
+rule download_bonev:
+  params:
+    url    = lambda wildcards: config['bonev']['samples']['CN_' + wildcards.sample],
+    outdir = 'results/other_datasets/bonev/'
+  output:
+    'results/other_datasets/bonev/GSE96107_CN_{sample}.bw'
+  shell:
+    "wget -P {params.outdir} {params.url}"
+    
+
+
+
+rule download_matsuda:
+  params:
+    url    = lambda wildcards: config['matsuda']['samples']['microglia_H3K27me3'],
+    outdir = 'results/other_datasets/matsuda/'
+  output:
+    'results/other_datasets/matsuda/GSM2800523_Microglia_{sample}_ChIP-seq.bw'
+  shell:
+    "wget -P {params.outdir} {params.url}"
+
+rule download_zhao:
+  params:
+    url    = lambda wildcards: config['zhao']['samples']['OPCs_H3K4me3'],
+    outdir = 'results/other_datasets/zhao/'
+  output:
+    'results/other_datasets/zhao/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.wig.gz'
+  shell:
+    "wget -P {params.outdir} {params.url}"
+
+rule zhao_wig_to_bw:
+  input:
+    'results/other_datasets/zhao/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.wig.gz'
+  output:
+    'results/other_datasets/zhao/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.bw'
+  params:
+    outdir       = 'results/other_datasets/zhao/',
+    gunziped_wig = 'results/other_datasets/zhao/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.wig',
+    chromSizes   = 'results/other_datasets/zhao/mm10.chromSizes'
+  shell:
+    'fetchChromSizes mm10 > {params.chromSizes}; '
+    'gunzip {input}; '
+    'wigToBigWig -clip {params.gunziped_wig} {params.chromSizes} {output}; '
+
+# mESC
+rule downlod_mES:
+  output:
+    bam1 = 'results/other_datasets/mESC_ENCODE/bam/ENCFF359LIR.bam',
+    bam2 = 'results/other_datasets/mESC_ENCODE/bam/ENCFF129XSB.bam'
+  params:
+    outdir = 'results/other_datasets/mESC_ENCODE/bam/',
+    url1   = config['mESC']['samples']['rep1'],
+    url2   = config['mESC']['samples']['rep2'],
+  shell:
+    """
+    wget -P {params.outdir} {params.url1} {params.url2}
+    """
+
+rule rename_the_download:
+  input:
+    bam1 = 'results/other_datasets/mESC_ENCODE/bam/ENCFF359LIR.bam',
+    bam2 = 'results/other_datasets/mESC_ENCODE/bam/ENCFF129XSB.bam'
+  output:
+    bam1 = 'results/other_datasets/mESC_ENCODE/bam/mESC_rep1.bam',
+    bam2 = 'results/other_datasets/mESC_ENCODE/bam/mESC_rep2.bam'
+  shell:
+    """
+    mv {input.bam1} {output.bam1}; 
+    mv {input.bam2} {output.bam2}; 
+    samtools index {output.bam1}; 
+    samtools index {output.bam2};
+    """
+
+rule mES_bam_to_bw:
+  input:
+    'results/other_datasets/mESC_ENCODE/bam/{sample}.bam'
+  output:
+    'results/other_datasets/mESC_ENCODE/bigwig/{sample}.bw'
+  threads: 16
+  shell:
+    "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
+    
+
+############# 3T3 cells
+
+rule fastq_dump_3T3:
+  output:
+    fastq_1 = "results/other_datasets/3T3_cells/fastq/{sample}_1.fastq.gz",
+    fastq_2 = "results/other_datasets/3T3_cells/fastq/{sample}_2.fastq.gz",
+  params:
+    SRA = "{sample}",
+    out_dir = "results/other_datasets/3T3_cells/fastq/"
+  threads: 32
+  shell:
+    """
+    fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
+    """
+
+rule map_3T3:
+  input:
+    fastq_1    = "results/other_datasets/3T3_cells/fastq/{sample}_1.fastq.gz",
+    fastq_2    = "results/other_datasets/3T3_cells/fastq/{sample}_2.fastq.gz",
+  output:
+    bam        = "results/other_datasets/3T3_cells/bam/{sample}.bam"
+  threads:16
+  params:
+    mm10_index = "/data/proj/GCB_MB/reference/bowtie2_index/mm10/mm10"
+  shell:
+    "bowtie2 --dovetail -p {threads} -1 {input.fastq_1} -2 {input.fastq_2} -x {params.mm10_index} | samtools view -bS - > {output}"
+    
+rule sort_bam_3T3:
+  input:
+    bam        = "results/other_datasets/3T3_cells/bam/{sample}.bam"
+  output:
+    bam        = "results/other_datasets/3T3_cells/possorted_bam/{sample}.bam"
+  threads: 16
+  shell:
+    "samtools sort -@ {threads} -o {output} {input} && samtools index {output}"
+  
+rule bam_to_bw_3T3:
+  input:
+    bam = "results/other_datasets/3T3_cells/possorted_bam/{sample}.bam"
+  output:
+    bam = "results/other_datasets/3T3_cells/bigwig/{sample}.bw"
+  threads: 16
+  shell:
+    "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
