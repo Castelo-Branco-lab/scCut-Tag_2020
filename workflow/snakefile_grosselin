@@ -5,12 +5,11 @@ rule fastq_dump:
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/fastq/"
-  threads: 32
+  threads: 26
   shell:
     """
     fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
     """
-
 
 rule map_barcodes:
   input:
@@ -27,9 +26,11 @@ rule map_barcodes:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/barcodes",
     config = os.path.dirname(workflow.basedir) + "/config/CONFIG_MB_scChIP"
-  threads: 32
+  threads: 26
   shell:
     os.path.dirname(workflow.basedir) + "/scChIPseq_DataEngineering/bin/schip_processing.sh -f {input.fw} -r {input.rev} -c {params.config} -o {params.out_dir}; touch {output.dummy}"
+
+
 
 rule bam_to_bw_grosselin:
   input:
@@ -37,7 +38,7 @@ rule bam_to_bw_grosselin:
     bam_index = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
   output:
     "results/other_datasets/grosselin_scChIP/{sample}/bigwig/{sample}.bw"
-  threads: 32
+  threads: 26
   shell:
     "bamCoverage -b {input.bam} -o {output} -p {threads} --ignoreDuplicates --binSize 10"
   
@@ -45,19 +46,19 @@ rule call_peaks_grosselin:
   input:
     bam = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
   output:
-    directory("results/other_datasets/grosselin_scChIP/{sample}/macs/{sample}/")
+    "results/other_datasets/grosselin_scChIP/{sample}/macs/{sample}_peaks.narrowPeak"
   params:
-    outdir = "results/other_datasets/grosselin_scChIP/{sample}/macs/{sample}/",
+    outdir = "results/other_datasets/grosselin_scChIP/{sample}/macs/",
     SRA    = "{sample}"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --max-gap 2500"
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --nolambda --extsize 200 --shift 100 -m 2 30 --keep-dup all"
 
 rule plot_fingerprint_grosselin:
   input:
     expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = config['grosselin']['scChIP'])
   output:
     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
-  threads: 16
+  threads: 26
   shell:
     "plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input} -p 16"
 

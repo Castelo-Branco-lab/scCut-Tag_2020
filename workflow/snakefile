@@ -9,6 +9,7 @@ include: 'snakefile_kaya_okur'
 include: 'snakefile_grosselin'
 include: 'snakefile_integration'
 include: 'snakefile_other_datasets'
+include: 'snakefile_figures'
 
 shell.executable("/bin/bash")
 #shell.prefix("source ~/.bash_profile; conda activate " + config['general']['conda_env']  + " ; ")
@@ -119,9 +120,9 @@ rule all:
     
     # Grosselin
     expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA=config['grosselin']['scChIP']),
-    directory(expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}/",SRA=config['grosselin']['scChIP'])),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bw",SRA=config['grosselin']['scChIP']),
+#    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA=config['grosselin']['scChIP']),
     
     
     # Kaya-Okur
@@ -129,12 +130,18 @@ rule all:
     expand("results/other_datasets/kaya_okur/bam/{s}.bam",s = config['kaya-okur']['samples']),
     expand("results/other_datasets/kaya_okur/bigwig/{s}.bw",s = config['kaya-okur']['samples']),
     
-     
+    # 3T3
+    expand("results/other_datasets/3T3_cells/bigwig/{SRA}.bw",SRA = [config['3T3']['samples'][x] for x in ['rep1','rep2']]),
+    'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak',
+    
+    # mESC
+    "results/other_datasets/mESC_ENCODE/macs/mESC_peaks.narrowPeak",
      
     # Fingerprint analysis
     "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
     "results/other_datasets/fingerprint_analysis/scCT_H3K27me3_fingerprint.txt",
+    "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
     
     # FrIP analysis
     expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample=['K562_H3K27me3_iCell8','K562_H3K4me2_iCell8','H1_H3K27me3_iCell8']),
@@ -144,6 +151,23 @@ rule all:
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
     
+    # Downsample fragments by cells
+#    expand('results/other_datasets/downsample/bigwig/fragments_{sample}_{n}.bw',sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+#    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
+#    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+    
+    # Correlation matrix
+    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody=["H3K27me3_cell_lines"]),
+    
+    # Figures
+    "results/Figures/revision/cell_lines_genome_browser.pdf",
+    "results/Figures/revision/brain_genome_browser.pdf",
+    expand("results/Figures/revision/metagene_heatmaps/{sample}_{method}_matrix.pdf",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+    
+    
+    # 
+    expand('results/merged/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam',cluster=['mOL'],antibody=['H3K27ac'],n=[10,20,50,100,200,500,1000,2000,5000])
 
 ################## PREPROCESSING
 rule bam_to_bw:
@@ -292,7 +316,7 @@ rule merge_bam_per_cluster:
     done
     """
 
-rule plot_fingerprint_scCT:
+rule plot_heatmap_scCT:
   input:
     merged_bam        = "results/merged/{antibody}/possorted_bam.bam",
     per_replicate_bam = expand("{cellranger}/outs/possorted_bam.bam",cellranger = [config['samples'][x]['cellranger_out'] for x in config['samples'] if config['samples'][x]['Antibody'] == "H3K27me3"]),
@@ -344,8 +368,8 @@ rule PCA:
     cell_lines         = directory("results/H3K27me3_cell_lines/clustering/bigwig/"),
     bonev_CN           = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
     matsuda_MGL        = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
-    OPCs_GCB           = "/data/proj/GCB_MB/cut_tag_GCB_lab/H3K27me3_OPCs/P13556_1026_dedup.bw",     # Deposit to GEO and fix link
-    Oli_neu_GCB        = "/data/proj/GCB_MB/cut_tag_GCB_lab/H3K27me3_olineu/P13556_1015_dedup.bw",   # Deposit to GEO and fix link
+    OPCs_GCB           = config['CR_GCB']['OPC']['bigwig'],     # Deposit to GEO and fix link
+    Oli_neu_GCB        = config['CR_GCB']['Oli-neu']['bigwig'],   # Deposit to GEO and fix link
     mESC_bigwig_1      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep1.bw',
     mESC_bigwig_2      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep2.bw',
     cells_3T3_rep1     = 'results/other_datasets/3T3_cells/bigwig/SRR9889940.bw',
@@ -363,13 +387,172 @@ rule PCA:
     multiBigwigSummary BED-file -b {input.cell_lines}*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
     multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
     """
-    # ls {input.markers_brain}*.bed {input.markers_lines}*.bed | grep -v OEC | while read line; do cat $line >> {output.markers}; done
-    # multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.cell_lines}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} {input.Oli_neu_GCB} -o {output.table} --BED {output.markers}
-    
-    
-    
+
+rule bed_per_cluster_and_replicate:
+  input:
+    fragments = "results/merged/{antibody}/fragments.tsv.gz",
+    barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv"
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bed/")
+  params:
+    script = os.path.dirname(workflow.basedir) + "/scripts/export_bam_per_replicate_and_cluster.py"
+  shell:
+    """
+    python3 {params.script} -f {input.fragments}  -b {input.barcodes}  -o {output} 
+    """
+
+rule bed_to_bam_per_cluster_and_replicate:
+  input:
+    bed = directory("results/other_datasets/correlation/{antibody}/bed/"),
+    genome = "results/mm10.chromSizes",
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bam/")
+  shell:
+    """
+    ls {input.bed}*.bed | while read line; do 
+      BAM=$(basename ${{line/.bed/.bam}})
+      bedToBam -i $line -g {input.genome} > {output}$BAM && samtools index {output}$BAM & 
+    done
+    wait $(jobs -p)
+    """
+
+rule bam_to_bw_bam_per_cluster:
+  input:
+    directory("results/other_datasets/correlation/{antibody}/bam/")
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bigwig/")
+  threads: 16
+  shell:
+    """
+    ls {input}*.bam | while read line; do
+      BIGWIG=$(basename ${{line/.bam/.bw}})
+      bamCoverage -b $line -o {output}$BIGWIG --normalizeUsing RPKM -p {threads}
+    done
+    """
+
+rule bigwig_summary_all_peaks:
+  input:
+    scCT_bigwig        = directory("results/other_datasets/correlation/{antibody}/bigwig/"),
+    peaks              = "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+  output:
+    matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"
+  threads: 16
+  shell:
+    "multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw -o {output.matrix} --BED {input.peaks} -p {threads}"
+
+#######################################################
+rule downsample_H3K27ac:
+  input:
+    fragments = "results/merged/{antibody}/fragments.tsv.gz",
+    barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv",
+  params:
+    script  = os.path.dirname(workflow.basedir) + "/scripts/downsample_sc.py",
+    n       = "{n}"
+  output:
+    'results/merged/{antibody}/downsample/bed/fragments_{cluster}_{n}.bed'
+  shell:
+    """
+    python3 {params.script} -f {input.fragments} -b {input.barcodes} -n {params.n} -c {wildcards.cluster} -o {output}
+    """
+
+rule downscale_general_bed_to_bam:
+  input:
+    bed = 'results/merged/{antibody}/downsample/bed/fragments_{cluster}_{n}.bed',
+    chromSizes = 'results/mm10.chromSizes'
+  output:
+    bam = 'results/merged/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam'
+  shell:
+    "bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {output.bam}"
+
+  
 
 
+######################################################
+rule downscale_prep:
+  input:
+    fragments = "results/merged/H3K27me3_cell_lines/fragments.tsv.gz",
+    barcodes  = "results/H3K27me3_cell_lines/clustering/bam_per_cluster/cluster_barcode_table.csv",
+  params:
+    cluster = "{sample}",
+    script  = os.path.dirname(workflow.basedir) + "/scripts/downsample_sc.py",
+    n       = "{n}"
+  output:
+    'results/other_datasets/downsample/bed/fragments_{sample}_{n}.bed'
+  shell:
+    """
+    python3 {params.script} -f {input.fragments} -b {input.barcodes} -n {params.n} -c {params.cluster} -o {output}
+    """
+
+rule fetchChromSizes:
+  output:
+    'results/mm10.chromSizes'
+  shell:
+    "fetchChromSizes mm10 > {output}"
+
+rule downscale_bed_to_bam:
+  input:
+    bed = 'results/other_datasets/downsample/bed/{sample}.bed',
+    chromSizes = 'results/mm10.chromSizes'
+  output:
+    bam = 'results/other_datasets/downsample/bam/{sample}.bam'
+  shell:
+    "bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {output.bam}"
+  
+
+rule downscale_bam_to_bw:
+  input:
+    bam = 'results/other_datasets/downsample/bam/{sample}.bam',
+  output:
+    bw = 'results/other_datasets/downsample/bigwig/{sample}.bw'
+  threads: 8
+  shell:
+    "bamCoverage -b {input.bam} -o {output.bw} --normalizeUsing RPKM -p {threads}"
+
+rule downscale_prep_bulk_bw:
+  input:
+    bam = lambda wildcards: {"3T3": "results/other_datasets/3T3_cells/possorted_bam/SRR9889940.bam", \
+                             "mESC": "results/other_datasets/mESC_ENCODE/bam/mESC_rep1.bam", \
+                             "Oli-neu": config['CR_GCB']['Oli-neu']['bam'] }[wildcards.sample.replace("_1","")],
+  output:
+    bw = 'results/other_datasets/downsample/bulk_bigwig/{sample}.bw'
+  threads: 16
+  shell:
+    "bamCoverage -b {input.bam} -o {output.bw} --normalizeUsing RPKM -p {threads}"
+
+rule compute_matrix:
+  input:
+    sc    = directory("results/other_datasets/downsample/bigwig/"),
+    bulk  = "results/other_datasets/downsample/bulk_bigwig/{sample}.bw",
+    peaks = lambda wildcards: {"3T3": "/data/proj/GCB_MB/CT/git_test/results/other_datasets/3T3_cells/macs/3T3_summits.bed", \
+                               "mESC": "results/other_datasets/mESC_ENCODE/peaks/ENCFF105NKG.bed", \
+                               "Oli-neu": "results/other_datasets/Oli_neu/macs/Oli_neu_summits.bed"}[wildcards.sample]
+  output:
+    sc_out   = "results/other_datasets/downsample/heatmap/{sample}_sc_matrix.txt.gz",
+    bulk_out = "results/other_datasets/downsample/heatmap/{sample}_bulk_matrix.txt.gz",
+  params:
+  threads: 16
+  shell:
+    """
+    l=$(ls {input.sc}fragments_{wildcards.sample}*.bw | while read line; do basename $line | sed 's/fragments_{wildcards.sample}_//g' | sed 's/.bw//g' ;done | sort -nr)     
+    files=$(for i in $l; do ls {input.sc}"fragments_{wildcards.sample}_"$i".bw"; done)                                                                                      # Aim of this is to re-order the files for the heatmap matrix
+    computeMatrix reference-point -S $files       -R {input.peaks} -o {output.sc_out}   -a 10000 -b 10000 -p {threads} --missingDataAsZero
+    computeMatrix reference-point -S {input.bulk} -R {input.peaks} -o {output.bulk_out} -a 10000 -b 10000 -p {threads} --missingDataAsZero
+    """
+
+rule plot_heatmap:
+  input:
+    matrix   = "results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.txt.gz",
+  output:
+    png   = "results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",
+  params:
+    zmax = lambda wildcards: {"3T3": {"sc":"100","bulk": "8"}, "mESC": {"sc": "1000","bulk": "8"}, "Oli-neu": {"sc": "100", "bulk": "8"}}[wildcards.sample][wildcards.method]
+  shell:
+    """
+    plotHeatmap -m {input.matrix}   -o {output.png}   --zMax {params.zmax}; 
+    """
+
+
+##################################################
 
 # Motif search
 rule motif_search:

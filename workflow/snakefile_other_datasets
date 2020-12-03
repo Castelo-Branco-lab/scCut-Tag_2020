@@ -79,7 +79,17 @@ rule mES_bam_to_bw:
   threads: 16
   shell:
     "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
-    
+
+rule download_peaks_mES:
+  output:
+    'results/other_datasets/mESC_ENCODE/peaks/ENCFF105NKG.bed'
+  params:
+    url = config['mESC']['peaks'],
+    outdir = 'results/other_datasets/mESC_ENCODE/peaks/'
+  shell:
+    """
+    wget -P {params.outdir} {params.url} && gunzip {output}.gz
+    """
 
 ############# 3T3 cells
 
@@ -90,19 +100,32 @@ rule fastq_dump_3T3:
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/3T3_cells/fastq/"
-  threads: 32
+  threads: 26
   shell:
     """
     fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
     """
 
+rule trim_3T3:
+  input:
+    fastq_1 = "results/other_datasets/3T3_cells/fastq/{sample}_1.fastq.gz",
+    fastq_2 = "results/other_datasets/3T3_cells/fastq/{sample}_2.fastq.gz",
+  output:
+    fastq_1 = "results/other_datasets/3T3_cells/fastq/{sample}_1_val_1.fq.gz",
+    fastq_2 = "results/other_datasets/3T3_cells/fastq/{sample}_2_val_2.fq.gz",
+  params:
+    outdir  = "results/other_datasets/3T3_cells/fastq/"
+  threads: 8
+  shell:
+    "trim_galore -j {threads} -o {params.outdir} --paired {input.fastq_1} {input.fastq_2}"
+
 rule map_3T3:
   input:
-    fastq_1    = "results/other_datasets/3T3_cells/fastq/{sample}_1.fastq.gz",
-    fastq_2    = "results/other_datasets/3T3_cells/fastq/{sample}_2.fastq.gz",
+    fastq_1 = "results/other_datasets/3T3_cells/fastq/{sample}_1_val_1.fq.gz",
+    fastq_2 = "results/other_datasets/3T3_cells/fastq/{sample}_2_val_2.fq.gz",
   output:
     bam        = "results/other_datasets/3T3_cells/bam/{sample}.bam"
-  threads:16
+  threads: 16
   params:
     mm10_index = "/data/proj/GCB_MB/reference/bowtie2_index/mm10/mm10"
   shell:
@@ -126,11 +149,42 @@ rule bam_to_bw_3T3:
   shell:
     "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
     
+rule call_peaks_3T3:
+  input:
+    expand("results/other_datasets/3T3_cells/possorted_bam/{sample}.bam",sample = [config['3T3']['samples'][x] for x in ['rep1','rep2']])
+  output:
+    'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak'
+  params:
+    outdir = 'results/other_datasets/3T3_cells/macs/',
+    name   = '3T3'
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {params.name} --outdir {params.outdir} --nomodel --shift 100 --extsize 200"
 
 
+# Call peaks bulk C&R Oli-neu
+
+rule call_peaks_oli_neu:
+  input:
+    config['CR_GCB']['Oli-neu']['bam']
+  output:
+    'results/other_datasets/Oli-neu/macs/Oli-neu_peaks.narrowPeak'
+  params:
+    outdir = 'results/other_datasets/Oli-neu/macs/',
+    name   = 'Oli-neu'
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {params.name} --outdir {params.outdir} --nomodel --nolambda"
 
 
-
+rule fingerprint_bulk:
+  input:
+    expand("{sample}", sample = [config['CR_GCB']['OPC']['bigwig'], "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw", "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw"]) 
+  output:
+    np     = "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.npz",
+    matrix = "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
+  params:
+  threads: 16
+  shell:
+    "multiBigwigSummary bins -o {output.np} --outRawCounts {output.matrix} -b {input} -p {threads}"
 
 
 
