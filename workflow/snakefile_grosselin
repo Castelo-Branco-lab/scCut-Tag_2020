@@ -1,26 +1,15 @@
-config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml'
-configfile: config_file
-shell.prefix("source ~/.bashrc; conda activate " + config['general']['conda_env']  + " ; ")
-
-rule prefetch:
-  output:
-    "/data/proj/GCB_MB/ncbi/tmp/sra/{sample}.sra"
-  params:
-    SRA  = "{sample}"
-  shell:
-    "prefetch {params.SRA}"
-    
 rule fastq_dump:
-  input:
-    "/data/proj/GCB_MB/ncbi/tmp/sra/{sample}.sra"
   output:
     fastq_1 = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_1.fastq.gz",
     fastq_2 = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_2.fastq.gz",
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/fastq/"
+  threads: 26
   shell:
-    "fastq-dump --split-files --gzip --outdir {params.out_dir} {params.SRA}"
+    """
+    fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
+    """
 
 rule map_barcodes:
   input:
@@ -29,23 +18,51 @@ rule map_barcodes:
   output:
     barcodes="results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/barcode/{sample}_read_barcodes.txt",
     #directory("{sample}/barcodes/"),
-    dummy="results/other_datasets/grosselin_scChIP/{sample}/barcodes/out.txt",
-    genome="results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/{sample}.bam"
+    dummy     = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/out.txt",
+    genome    = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/{sample}.bam",
+    bam_final = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
+    bam_index = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/barcodes",
     config = os.path.dirname(workflow.basedir) + "/config/CONFIG_MB_scChIP"
-  threads: 56
+  threads: 26
   shell:
-    "(./scChIPseq_DataEngineering/bin/schip_processing.sh -f {input.fw} -r {input.rev} -c {params.config} -o {params.out_dir}; touch {output.dummy})"
+    os.path.dirname(workflow.basedir) + "/scChIPseq_DataEngineering/bin/schip_processing.sh -f {input.fw} -r {input.rev} -c {params.config} -o {params.out_dir}; touch {output.dummy}"
 
-rule sort_genome_bam:
+
+
+rule bam_to_bw_grosselin:
   input:
-    "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/{sample}.bam"
+    bam = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
+    bam_index = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
   output:
-    "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/possorted_{sample}.bam"
-  threads: 56
+    "results/other_datasets/grosselin_scChIP/{sample}/bigwig/{sample}.bw"
+  threads: 26
   shell:
-    "samtools sort {input} -o {output} -@ {threads}"
+    "bamCoverage -b {input.bam} -o {output} -p {threads} --ignoreDuplicates --binSize 10"
+  
+rule call_peaks_grosselin:
+  input:
+    bam = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
+  output:
+    "results/other_datasets/grosselin_scChIP/{sample}/macs/{sample}_peaks.narrowPeak"
+  params:
+    outdir = "results/other_datasets/grosselin_scChIP/{sample}/macs/",
+    SRA    = "{sample}"
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --nolambda --extsize 200 --shift 100 -m 2 30 --keep-dup all"
+
+rule plot_fingerprint_grosselin:
+  input:
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = config['grosselin']['scChIP'])
+  output:
+    "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
+  threads: 26
+  shell:
+    "plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input} -p 16"
+
+
+  
 
 

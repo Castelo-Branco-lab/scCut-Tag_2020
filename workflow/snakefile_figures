@@ -1,20 +1,42 @@
-config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml' 
-configfile: config_file
+rule plot_browser_cell_lines:
+  input:
+    mES_ENCODE    = directory("results/other_datasets/mESC_ENCODE/bigwig/"),
+    bulk_3T3      = directory("results/other_datasets/3T3_cells/bigwig/"),
+    bulk_Oli_neu  = config['CR_GCB']['Oli-neu']['bigwig'],
+    sc_cell_lines = 'results/H3K27me3_cell_lines/clustering/bigwig/',
+  output:
+    pdf = "results/Figures/revision/cell_lines_genome_browser.pdf"
+  params:
+    track_config   = os.path.dirname(workflow.basedir) + "/config/genome_tracks/tracks_bulk_sc_cell_lines.ini", # TODO - change to be dynamicaly generated
+    genomic_region = "chr15:77,800,000-80,325,000",
+  shell:
+    "pyGenomeTracks --tracks {params.track_config} --region {params.genomic_region} --outFileName {output.pdf}"
 
-samples_dict    = {x: config['samples'][x]['Antibody'] for x in config['samples'].keys()}
-antibody_dict   = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
 
-rule all_figures:
-	input:
-		"results/Figures/test.txt"
+rule plot_browser_brain:
+  input:
+    sc_brain = directory('results/H3K27me3/clustering/bigwig/'),
+    bonev    = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
+    matsuda  = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
+    opc_cr   = config['CR_GCB']['OPC']['bigwig']
+  output:
+    pdf = "results/Figures/revision/brain_genome_browser.pdf"
+  params:
+    track_config   = os.path.dirname(workflow.basedir) + "/config/genome_tracks/tracks_single_cell_brain.ini", # TODO - change to be dynamicaly generated
+    genomic_region = "chr7:143,588,246-145,185,504"
+  shell:
+    "pyGenomeTracks --tracks {params.track_config} --region {params.genomic_region} --outFileName {output.pdf}"
 
-rule figure1:
-	input:
-		rds       = expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
-		fragments = expand("{cellranger_path}/outs/fragments.tsv.gz", cellranger_path = [config['samples'][x]['cellranger_out']for x in config['samples'].keys()]),
-		markers   = expand("results/{antibody}/clustering/markers.csv",antibody = antibody_dict.keys()),
-		bigiwgs   = directory(expand("results/{antibody}/clustering/bigwig/",antibody = antibody_dict.keys())),
-	output:
-		"results/Figures/test.txt"
-	shell:
-		"touch {output}"
+
+rule plot_heatmap_for_figures:
+  input:
+    matrix   = "results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.txt.gz",
+  output:
+    pdf   = "results/Figures/revision/metagene_heatmaps/{sample}_{method}_matrix.pdf",
+  params:
+    zmax = lambda wildcards: {"3T3": {"sc":"50","bulk": "8"}, "mESC": {"sc": "800","bulk": "6"}, "Oli-neu": {"sc": "100", "bulk": "8"}}[wildcards.sample][wildcards.method]
+  shell:
+    """
+    plotHeatmap -m {input.matrix}   -o {output.pdf}   --zMax {params.zmax} --heatmapHeight 20 --heatmapWidth 5 --refPointLabel "peak summit" --legendLocation lower-left; 
+    """
+
