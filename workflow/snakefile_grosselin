@@ -5,7 +5,7 @@ rule fastq_dump:
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/fastq/"
-  threads: 26
+  threads: 16
   shell:
     """
     fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
@@ -16,21 +16,19 @@ rule map_barcodes:
     fw="results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_1.fastq.gz",
     rev="results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_2.fastq.gz"
   output:
-    barcodes="results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/barcode/{sample}_read_barcodes.txt",
-    #directory("{sample}/barcodes/"),
-    dummy     = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/out.txt",
-    genome    = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/{sample}.bam",
-    bam_final = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
-    bam_index = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
+    barcodes   = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/barcode/{sample}_read_barcodes.txt",
+    genome     = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/genome/{sample}.bam",
+    bam_final  = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
+    bam_index  = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
+#    directory  = directory("results/other_datasets/grosselin_scChIP/{sample}/barcodes/")
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/grosselin_scChIP/{sample}/barcodes",
     config = os.path.dirname(workflow.basedir) + "/config/CONFIG_MB_scChIP"
   threads: 26
   shell:
-    os.path.dirname(workflow.basedir) + "/scChIPseq_DataEngineering/bin/schip_processing.sh -f {input.fw} -r {input.rev} -c {params.config} -o {params.out_dir}; touch {output.dummy}"
-
-
+    "if [[ -d {params.out_dir} ]]; then rm -r {params.out_dir}; fi; " + os.path.dirname(workflow.basedir) + "/scChIPseq_DataEngineering/bin/schip_processing.sh -f {input.fw} -r {input.rev} -c {params.config} -o {params.out_dir}"
+    
 
 rule bam_to_bw_grosselin:
   input:
@@ -38,7 +36,7 @@ rule bam_to_bw_grosselin:
     bam_index = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam.bai",
   output:
     "results/other_datasets/grosselin_scChIP/{sample}/bigwig/{sample}.bw"
-  threads: 26
+  threads: 12
   shell:
     "bamCoverage -b {input.bam} -o {output} -p {threads} --ignoreDuplicates --binSize 10"
   
@@ -51,18 +49,82 @@ rule call_peaks_grosselin:
     outdir = "results/other_datasets/grosselin_scChIP/{sample}/macs/",
     SRA    = "{sample}"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --nolambda --extsize 200 --shift 100 -m 2 30 --keep-dup all"
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --nolambda --extsize 200 --shift 100 -m 2 30"
 
 rule plot_fingerprint_grosselin:
   input:
     expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = config['grosselin']['scChIP'])
   output:
     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
-  threads: 26
+  threads: 12
   shell:
     "plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input} -p 16"
 
 
-  
+################################# Grosselin MB analysis
+
+rule trim_grosselin:
+  input:
+    fw = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_1.fastq.gz",
+    rev = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_2.fastq.gz",
+  output:
+    fw = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_val_1.fq.gz",
+    rev = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_val_2.fq.gz",
+  threads: 8
+  params:
+    outdir = "results/other_datasets/grosselin_scChIP/{sample}/fastq/"
+  shell:
+    "trim_galore --paired --fastqc --basename {wildcards.sample} -o {params.outdir} -j {threads} {input.fw} {input.rev}"
+
+rule map_bowtie_grosselin:
+  input:
+    fw = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_val_1.fq.gz",
+    rev = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_val_2.fq.gz",
+  output:
+    bam   = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bam",
+    index = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bam.bai",
+    bowtie_log   = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}_mapping.log",
+  params:
+    GRCh38_index = "/data/proj/GCB_MB/reference/bowtie2_index/GRCh38_noalt_as/GRCh38_noalt_as",
+  threads: 12
+  shell:
+    "bowtie2 --dovetail -p {threads} -1 {input.fw} -2 {input.rev} -x {params.GRCh38_index} 2> {output.bowtie_log} | samtools sort -@ {threads} > {output.bam} && samtools index {output.bam}"
+
+
+rule bam_to_bw_grosselin_bowtie:
+  input:
+    bam = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bam",
+    index = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bam.bai",
+  output:
+    "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bw"
+  threads: 12
+  shell:
+    "bamCoverage -b {input.bam} -o {output} -p {threads} --ignoreDuplicates --binSize 10"
+
+rule call_peaks_grosselin_bowtie: 
+  input:
+    bam = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bam",
+  output:
+    "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/macs/{sample}_peaks.narrowPeak"
+  params:
+    outdir = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/macs/"
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {wildcards.sample} --nolambda --extsize 200 --shift 100"
+
+rule intersect_reads_peaks:
+  input:
+    bam   = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
+    peaks = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/macs/{sample}_peaks.narrowPeak",
+  output:
+    cell_statistics = "results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_cell_statistics.txt",
+    all_reads       = temp("results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_all.txt"),
+    peak_reads      = temp("results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_peaks_intersect.txt"),
+  shell:
+    """
+    bedtools intersect -abam {input.bam} -b {input.peaks} -u -ubam | samtools view | cut -f18 | sort  | uniq -c | sort -k1,1nr >  {output.peak_reads}
+    samtools view {input.bam} | cut -f18 | sort  | uniq -c | sort -k1,1nr > {output.all_reads}
+    awk ' NR==FNR{{a[$2] = $1 }} NR!=FNR{{print $2,$1,a[$2],$1/a[$2]  }}' {output.all_reads} {output.peak_reads} > {output.cell_statistics}
+    """
+    
 
 

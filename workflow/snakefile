@@ -12,9 +12,9 @@ include: 'snakefile_other_datasets'
 include: 'snakefile_figures'
 
 shell.executable("/bin/bash")
-#shell.prefix("source ~/.bash_profile; conda activate " + config['general']['conda_env']  + " ; ")
+shell.prefix("source ~/.bash_profile; conda activate " + config['general']['conda_env']  + " ; ")
 
-shell.prefix("source ~/anaconda3/etc/profile.d/conda.sh; conda activate " + config['general']['conda_env']  + " ; ")
+#shell.prefix("source ~/anaconda3/etc/profile.d/conda.sh; conda activate " + config['general']['conda_env']  + " ; ")
 CWD = os.getcwd()
 
 # List of samples and antibodies
@@ -123,6 +123,9 @@ rule all:
 #    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA=config['grosselin']['scChIP']),
     expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA=config['grosselin']['scChIP']),
     expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/frip/{SRA}_cell_statistics.txt",SRA=config['grosselin']['scChIP']),
     
     
     # Kaya-Okur

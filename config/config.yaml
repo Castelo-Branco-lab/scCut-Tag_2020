@@ -211,8 +211,8 @@ ATAC_seq:
 grosselin:
   scChIP:
     - SRR7536860
-#    - SRR7536861
-#    - SRR7536862
+    - SRR7536861
+    - SRR7536862
 #    - SRR7536863
 #    - SRR7536864
 #    - SRR7536865
@@ -256,11 +256,19 @@ mESC:
   samples:
     rep1: https://www.encodeproject.org/files/ENCFF359LIR/@@download/ENCFF359LIR.bam
     rep2: https://www.encodeproject.org/files/ENCFF129XSB/@@download/ENCFF129XSB.bam
+  peaks: https://www.encodeproject.org/files/ENCFF105NKG/@@download/ENCFF105NKG.bed.gz
     
 3T3:
   samples:
     rep1: SRR9889940
     rep2: SRR9889941
+
+CR_GCB:
+    Oli-neu: 
+      bigwig: "/data/proj/GCB_MB/cut_tag_GCB_lab/H3K27me3_olineu/P13556_1015_dedup.bw"
+      bam: /data/proj/GCB_MB/cut_tag_GCB_lab/H3K27me3_olineu/P13556_1015_sorted.bam
+    OPC: 
+      bigwig: "/data/proj/GCB_MB/cut_tag_GCB_lab/H3K27me3_OPCs/P13556_1026_dedup.bw"
 
 db:
   genome_fa: "/data/proj/GCB_MB/reference/fasta_masked/mm10/mm10.fa.masked"

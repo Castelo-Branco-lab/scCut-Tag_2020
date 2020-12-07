@@ -95,6 +95,13 @@ f.merge$sample <- factor(f.merge$sample,levels=unique(f.merge$sample)[c(1:4,8,9,
 f.merge$group  <- factor(f.merge$group,levels=unique(f.merge$group)[c(1,3,2)])
 ```
 
+```{r}
+sra <- c("SRR7536860","SRR7536861","SRR7536862")
+lapply(sra,function(x){
+  grosselin.frip <- read.table(file=paste0(params$out_prefix,'other_datasets/grosselin_scChIP/',x,'/frip/',x,'_cell_statistics.txt'),stringsAsFactors=FALSE)
+})
+```
+
 
 
 ```{r,fig}
@@ -292,6 +299,11 @@ a <- hist(log10(df.ls[[2]][,2]))
 
 # Cell lines
 ```{r,fig.width=6,fig.height=3}
+library(reticulate)
+library(ggplot2)
+library(ggrepel)
+library(ggthemes)
+
 
 np <- import("numpy")
 npz1 <- np$load(file = paste0(params$out_prefix,"other_datasets/PCA/PCA_table_cell_lines.npz"))
@@ -304,10 +316,10 @@ d <- head(d,200)
 
 d.pca <-prcomp(na.omit(d),scale=TRUE,center=TRUE)
 plot.labels <- c("sc-3T3",
-                 "sc-mES_1",
-                 "sc-mES_2",
-                 "sc-Oli-neu_1",
-                 "sc-Oli-neu_2",
+                 "sc-mES_A",
+                 "sc-mES_B",
+                 "sc-Oli-neu_A",
+                 "sc-Oli-neu_B",
                  "bulk-Oli-neu",
                  "bulk-mESC_rep1",
                  "bulk-mESC_rep2",
@@ -319,10 +331,13 @@ pca.plot        <- as.data.frame(d.pca$rotation)
 pca.plot$group  <- factor(c(rep("single_cell",5),rep("bulk",5)),levels=c('single_cell','bulk'))
 pca.plot$sample <- plot.labels
 
-p1 <- ggplot(data = pca.plot, aes(x = PC1,y = PC2,label = sample)) + 
-  geom_point(aes(color = group),size=5) + 
+p1 <- ggplot(data = pca.plot, aes(x = PC1,y = PC2,label = sample,shape=group)) + 
+  geom_jitter(aes(color = group),size=5,stroke =1.5,width = 0.01,height=0.01) + 
   geom_text_repel(force=100,size=6,point.padding = 1) +
-  theme_few() + theme(legend.position = "None") + coord_cartesian(xlim=c(-1.5,1.5),ylim=c(-0.8,0.5))
+  theme_few() + 
+  theme(legend.position = "None") + 
+  coord_cartesian(xlim=c(-1.5,1.5),ylim=c(-0.8,0.5)) + 
+  scale_shape_manual(values=c(3, 4))
 
 p1 
 
@@ -354,6 +369,7 @@ dev.off()
 
 ```{r, fig.width=10, fig.height=10}
 library(matrixStats)
+library(reshape2)
 
 np <- import("numpy")
 npz1 <- np$load(file = paste0(params$out_prefix,"other_datasets/correlation/H3K27me3_cell_lines_correlation_matrix.txt.gz"))
@@ -363,8 +379,8 @@ colnames(d) <- gsub(".bw","",npz1$f[['labels']])
 
 
 d <- d[rowSums(d) > 0,]
-
-
+colnames(d) <- gsub("_1_","_A_",colnames(d))
+colnames(d) <- gsub("_2_","_B_",colnames(d))
 #d.short <- d[sample(1:nrow(d),25000),]
 
 
@@ -483,7 +499,19 @@ dev.off()
 
 
 ```{r,fig.width=2,fig.height=3}
-d.to.plot <- table(brain$cell_type,brain$sample)
+brain <- readRDS(paste0(params$out_prefix,"H3K27me3_cell_lines/clustering/01.clustering.Rds"))
+
+idents.old <- unique(brain@active.ident)
+
+idents <- idents.old
+idents <- gsub("_1","_A",idents)
+idents <- gsub("_2","_B",idents)
+names(idents) <- idents.old
+
+brain <- RenameIdents(object = brain,idents)
+levels(brain@active.ident) <- c("mESC_A","mESC_B","3T3","Oli-neu_A","Oli-neu_B")
+
+d.to.plot <- table(brain@active.ident,brain$sample)
 d.to.plot <- apply(d.to.plot,2,function(x){x/sum(x)})
 d.to.plot <- melt(d.to.plot)
 

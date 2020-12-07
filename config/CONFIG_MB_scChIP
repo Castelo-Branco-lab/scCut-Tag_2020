@@ -1,10 +1,10 @@
   ## TOOLS PATH 
-BOWTIE_PATH = /data/bin/bowtie
-BOWTIE2_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/bowtie2
-SAMTOOLS_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/samtools
-PYTHON_PATH = /usr/bin/python2
-R_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/R
-FASTX_PATH = $HOME/anaconda3/envs/CT_snakemake/bin/
+BOWTIE_PATH = /data/bin/
+BOWTIE2_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/
+SAMTOOLS_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/
+PYTHON_PATH = /home/marek/anaconda3/envs/bioinfo-2.7/bin/
+R_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/
+FASTX_PATH = /home/marek/anaconda3/envs/CT_snakemake/bin/
 STAR_PATH = STAR
 R_DOWNSTREAM = /data/proj/GCB_MB/CT/git_test/scCut-Tag_2020/scChIPseq/R_scChIP_seq_analysis.R
 
@@ -35,7 +35,7 @@ GENOME_MAPPING_OPTS = -S -X 450 -m 1 -y --allow-contain
 GENOME_MAPPING_OPTS_STAR = --alignEndsType EndToEnd --alignIntronMax 1 --peOverlapNbasesMin 10 --alignMatesGapMax 450 --limitGenomeGenerateRAM 25000000000 --outSAMunmapped Within
 GENOME_IDX_PATH_STAR = /data/proj/GCB_MB/reference/STAR/STAR-2.7.6/hg38/
 
-TMP_DIR = /data/proj/GCB_MB/revisions/grosselin_scChIP/tmp
+TMP_DIR = /data/proj/GCB_MB/CT/git_test/results/tmp
 ENCODE_BLACKLIST = 
 
 #DOWNSTREAM ANALYSIS
