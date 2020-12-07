@@ -53,7 +53,7 @@ rule call_peaks_grosselin:
 
 rule plot_fingerprint_grosselin:
   input:
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = config['grosselin']['scChIP'])
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = list(config['grosselin']['scChIP'].keys()))
   output:
     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
   threads: 12

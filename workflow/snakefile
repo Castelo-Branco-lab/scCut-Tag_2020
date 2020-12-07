@@ -119,13 +119,13 @@ rule all:
     'results/H3K27ac/cicero/cicero_image.Rdata',
     
     # Grosselin
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA = list(config['grosselin']['scChIP'].keys())),
 #    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/frip/{SRA}_cell_statistics.txt",SRA=config['grosselin']['scChIP']),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/frip/{SRA}_cell_statistics.txt",SRA = list(config['grosselin']['scChIP'].keys())),
     
     
     # Kaya-Okur

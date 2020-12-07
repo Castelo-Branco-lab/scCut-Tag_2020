@@ -210,16 +210,23 @@ ATAC_seq:
 
 grosselin:
   scChIP:
-    - SRR7536860
-    - SRR7536861
-    - SRR7536862
+     SRR7536860:
+       SRA: SRR7536860
+       count_table: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3290nnn/GSM3290889/suppl/GSM3290889_CountTable_HBCx-95_scChIP_H3K27me3_hg38.txt.gz
+     SRR7536861:
+       SRA: SRR7536861
+       count_table: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3290nnn/GSM3290890/suppl/GSM3290890_CountTable_HBCx-95-CapaR_scChIP_H3K27me3_hg38.txt.gz
+     SRR7536862:
+       SRA: SRR7536862
+       count_table: ftp://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3290nnn/GSM3290891/suppl/GSM3290891_CountTable_HBCx-22_scChIP_H3K27me3_hg38.txt.gz
+
 #    - SRR7536863
 #    - SRR7536864
 #    - SRR7536865
 #    - SRR7536866
 #    - SRR7536867
-  test:
-    - SRR7536860
+#  test:
+#    - SRR7536860
 
   bowtie2_index: 
     hg38: /data/ref/bowtie2/GRCh38
