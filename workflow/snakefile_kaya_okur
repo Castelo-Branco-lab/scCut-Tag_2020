@@ -169,7 +169,7 @@ rule call_peaks_kaya_okur_FrIP:
     outdir = "results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/",
     SRA    = "{sample}"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --max-gap 2500 --nolambda " # --slocal 1000000 --llocal 1000000"
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.SRA} --max-gap 1000 --nolambda " # --slocal 1000000 --llocal 1000000"
 
 rule intersect_kaya_okur_fragments_with_peaks:
   input:

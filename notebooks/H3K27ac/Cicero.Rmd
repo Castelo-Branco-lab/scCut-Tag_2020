@@ -6,7 +6,7 @@ params:
 ---
 
 ```{r}
-devtools::install_github("cole-trapnell-lab/cicero-release", ref = "monocle3")
+# devtools::install_github("cole-trapnell-lab/cicero-release", ref = "monocle3")
 
 suppressMessages({
 library(cicero);
@@ -56,11 +56,11 @@ dir.create(paste0(params$out_prefix,'/H3K27ac/cicero/'))
 saveRDS(object = conns,file = paste0(params$out_prefix,'/H3K27ac/cicero/connections.Rds'))
 
 
-COACCESS_CUTOFF = 0.1
+COACCESS_CUTOFF = 0.2
 conns.pairs <- Pairs(first  = StringToGRanges(conns$Peak1)[which(conns$coaccess > COACCESS_CUTOFF)],
                      second = StringToGRanges(conns$Peak2)[which(conns$coaccess > COACCESS_CUTOFF)])
 
-rtracklayer::export(object = conns.pairs,format = 'bedpe',con = '~/temp.bedpe')
+#rtracklayer::export(object = conns.pairs,format = 'bedpe',con = '~/temp.bedpe')
 
 ```
 

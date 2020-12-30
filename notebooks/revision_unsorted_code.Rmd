@@ -96,10 +96,41 @@ f.merge$group  <- factor(f.merge$group,levels=unique(f.merge$group)[c(1,3,2)])
 ```
 
 ```{r}
-sra <- c("SRR7536860","SRR7536861","SRR7536862")
-lapply(sra,function(x){
-  grosselin.frip <- read.table(file=paste0(params$out_prefix,'other_datasets/grosselin_scChIP/',x,'/frip/',x,'_cell_statistics.txt'),stringsAsFactors=FALSE)
+sra   <- c("SRR7536860","SRR7536861","SRR7536862")
+#names <- 
+
+grosselin.frip <- lapply(sra,function(x){
+  read.table(file=paste0(params$out_prefix,'other_datasets/grosselin_scChIP/',x,'/frip/',x,'_cell_statistics.txt'),stringsAsFactors=FALSE)
 })
+
+grosselin.barcodes <- lapply(sra,function(x){
+  as.character(read.table(file=paste0(params$out_prefix,'other_datasets/grosselin_scChIP/',x,'/barcodes/counts/',x,'_flagged_rmPCR_RT_rmDup_counts_50000.tsv'),stringsAsFactors=FALSE,nrows = 1)[1,-1])
+})
+
+
+grosselin.frip.filter<- lapply(1:length(grosselin.frip),function(x){
+  d <- grosselin.frip[[x]]
+  d$V1 <- gsub("XB:Z:","",d$V1)
+  d <- d[d$V1 %in% grosselin.barcodes[[x]],]
+  d
+})
+
+
+grosselin.frip.filter <-  lapply(1:length(grosselin.frip.filter),function(x){
+  d <- grosselin.frip.filter[[x]]
+  d$sample <- paste0("Grosselin_",x)
+  d
+})
+
+lapply(grosselin.frip.filter,function(x){median(x$V4)})
+
+grosselin.to.plot <- do.call('rbind',grosselin.frip.filter)
+colnames(grosselin.to.plot) <- c("barcode","peak","all","ratio","sample")
+
+grosselin.to.plot$group    <- "scChIP-seq"
+grosselin.to.plot$antibody <- "H3K27me3"
+
+f.merge <- rbind(f.merge,grosselin.to.plot)
 ```
 
 
@@ -107,7 +138,7 @@ lapply(sra,function(x){
 ```{r,fig}
 
 p1 <- ggplot(data=f.merge,aes(y=ratio,x=sample,fill=group)) + 
-  geom_violin()  + 
+  geom_violin(trim = TRUE,scale = 'width')  + 
   theme_few() + 
   theme(axis.text.x = element_text(angle = 60,hjust=1))+ xlab("") +
   scale_fill_discrete(name="") + 
@@ -116,7 +147,9 @@ p1 <- ggplot(data=f.merge,aes(y=ratio,x=sample,fill=group)) +
   theme(text=element_text(size=18))
 
 p2 <- ggplot(data=f.merge,aes(y=log10(all),x=sample,fill=group)) + 
-  geom_violin(outlier.shape = NA) + theme_few() + theme(axis.text.x = element_text(angle = 60,hjust=1)) + 
+  geom_violin(outlier.shape = NA,scale = 'width') + 
+  theme_few() + 
+  theme(axis.text.x = element_text(angle = 60,hjust=1)) + 
   xlab("") + 
   scale_fill_discrete(name="") + 
   stat_summary(fun.data = "mean_sdl",geom='pointrange',fun.args = (mult=1),color='black',position = position_dodge(0.9)) + 
@@ -125,16 +158,19 @@ p2 <- ggplot(data=f.merge,aes(y=log10(all),x=sample,fill=group)) +
 
 
 f.table <- as.data.frame(table(f.merge$sample))
-f.table$group <- c(rep('scCT_brain',4),rep('scCT_cell_lines',2),rep('Kaya-Okur',3))
+f.table$group <- c(rep('scCT_brain',4),rep('scCT_cell_lines',2),rep('Kaya-Okur',3),rep('Grosselin scChIP',3))
 f.table <- f.table[f.table$group != 'Kaya-Okur',]
 
+# Hard-coding for revision, but no time
 kaya_okur_per_replicate       <- data.frame(Var1=c('H3K27me3_K562_rep1','H3K27me3_K562_rep2','H3K27me3_H1','H3K4me2_rep1','H3K4me2_rep2'),
                                             Freq=c(908,479,486,489,393),
                                             group='Kaya-Okur')
 
 f.table <- rbind(f.table,kaya_okur_per_replicate)
-f.table$group <- factor(f.table$group,levels=unique(f.table$group))
+f.table$group <- factor(f.table$group,levels=unique(f.table$group)[c(1,2,4,3)])
 
+f.table <- f.table[c(1:6,10:14,7:9),]
+f.table$Var1 <- factor(f.table$Var1,levels=f.table$Var1)
 
 p3 <- ggplot(data=f.table,aes(y=Freq,x=Var1,fill=group)) + 
   geom_bar(col='black',stat='identity') + theme_few() + 
@@ -143,11 +179,14 @@ p3 <- ggplot(data=f.table,aes(y=Freq,x=Var1,fill=group)) +
   scale_fill_discrete(name="") + 
   ylab("") +
   theme(text=element_text(size=18))
+p3
 
 p1
-ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_FriP.pdf'),plot = p1,width = 8,height = 7)
-ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_nFragments.pdf'),plot = p2,width = 8,height = 7)
-ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_nCells.pdf'),plot = p3,width = 8,height = 7)
+p2
+p3
+ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_FriP.pdf'),plot = p1,width = 8,height = 6)
+ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_nFragments.pdf'),plot = p2,width = 8,height = 6)
+ggsave(filename = paste0(params$out_prefix,'Figures/revision/scCT_QC_nCells.pdf'),plot = p3,width = 8,height = 6)
 ```
 
 

@@ -6,3 +6,5 @@
 *.html
 *.Rhistory
 *.pdf
+notebooks/H3K9me3/H3K9me3_clustering_merge.Rmd
+.snakemake/

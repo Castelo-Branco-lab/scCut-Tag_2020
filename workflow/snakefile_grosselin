@@ -1,3 +1,16 @@
+rule download_matrix:
+  output:
+    dummy    = "results/other_datasets/grosselin_scChIP/{sample}/count_matrix/{sample}_CountTable_hg38.txt.gz" 
+  params:
+    url      = lambda wildcards: config['grosselin']['scChIP'][wildcards.sample]['count_table'],
+    filename = "results/other_datasets/grosselin_scChIP/{sample}/count_matrix/{sample}_CountTable_hg38.txt.gz",
+  shell:
+    """
+    wget -O {params.filename} {params.url}
+    """
+    
+
+
 rule fastq_dump:
   output:
     fastq_1 = "results/other_datasets/grosselin_scChIP/{sample}/fastq/{sample}_1.fastq.gz",
@@ -109,16 +122,16 @@ rule call_peaks_grosselin_bowtie:
   params:
     outdir = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/macs/"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {wildcards.sample} --nolambda --extsize 200 --shift 100"
+    "macs2 callpeak -t {input} -g mm -f BAM --outdir {params.outdir} --nomodel -n {wildcards.sample} --nolambda --extsize 200 --shift 100 --max-gap 1000"
 
 rule intersect_reads_peaks:
   input:
     bam   = "results/other_datasets/grosselin_scChIP/{sample}/barcodes/mapping/{sample}_flagged_rmPCR.bam",
     peaks = "results/other_datasets/grosselin_scChIP/{sample}/bowtie2/macs/{sample}_peaks.narrowPeak",
   output:
-    cell_statistics = "results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_cell_statistics.txt",
-    all_reads       = temp("results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_all.txt"),
-    peak_reads      = temp("results/other_datasets/grosselin_scChIP/{sample}/frip/{sample}_peaks_intersect.txt"),
+    cell_statistics = "results/other_datasets/frip_analysis/grosselin/{sample}/{sample}_cell_statistics.txt",
+    all_reads       = "results/other_datasets/frip_analysis/grosselin/{sample}/{sample}_all.txt",
+    peak_reads      = "results/other_datasets/frip_analysis/grosselin/{sample}/{sample}_peaks.txt",
   shell:
     """
     bedtools intersect -abam {input.bam} -b {input.peaks} -u -ubam | samtools view | cut -f18 | sort  | uniq -c | sort -k1,1nr >  {output.peak_reads}

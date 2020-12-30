@@ -125,7 +125,8 @@ rule all:
     expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
     expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
     expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/frip/{SRA}_cell_statistics.txt",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/frip_analysis/grosselin/{SRA}/{SRA}_cell_statistics.txt",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/count_matrix/{SRA}_CountTable_hg38.txt.gz",SRA = list(config['grosselin']['scChIP'].keys())),
     
     
     # Kaya-Okur
