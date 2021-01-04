@@ -3,4 +3,4 @@
 	url = https://github.com/vallotlab/scChIPseq
 [submodule "scChIPseq_DataEngineering"]
 	path = scChIPseq_DataEngineering
-	url = https://github.com/vallotlab/scChIPseq_DataEngineering
+	url = https://github.com/mardzix/scChIPseq_DataEngineering
