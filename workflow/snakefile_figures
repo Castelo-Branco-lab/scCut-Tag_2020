@@ -1,7 +1,7 @@
 rule plot_browser_cell_lines:
   input:
-    mES_ENCODE    = directory("results/other_datasets/mESC_ENCODE/bigwig/"),
-    bulk_3T3      = directory("results/other_datasets/3T3_cells/bigwig/"),
+    mES_ENCODE    = "results/other_datasets/mESC_ENCODE/bigwig/",
+    bulk_3T3      = "results/other_datasets/3T3_cells/bigwig/",
     bulk_Oli_neu  = config['CR_GCB']['Oli-neu']['bigwig'],
     sc_cell_lines = 'results/H3K27me3_cell_lines/clustering/bigwig/',
   output:
@@ -15,7 +15,7 @@ rule plot_browser_cell_lines:
 
 rule plot_browser_brain:
   input:
-    sc_brain = directory('results/H3K27me3/clustering/bigwig/'),
+    sc_brain = 'results/H3K27me3/clustering/bigwig/',
     bonev    = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
     matsuda  = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
     opc_cr   = config['CR_GCB']['OPC']['bigwig']

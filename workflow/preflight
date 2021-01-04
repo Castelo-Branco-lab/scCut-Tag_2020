@@ -1,0 +1,26 @@
+config_file = os.path.dirname(workflow.basedir) + '/config/config.yaml'
+configfile: config_file
+
+
+shell.executable("/bin/bash")
+shell.prefix("source ~/.bash_profile; conda activate " + config['general']['conda_env']  + " ; ")
+
+#shell.prefix("source ~/anaconda3/etc/profile.d/conda.sh; conda activate " + config['general']['conda_env']  + " ; ")
+CWD = os.getcwd()
+
+# List of samples and antibodies
+antibody_list   = [config['samples'][x]['Antibody'] for x in config['samples'].keys()]
+
+# sample: antibody hash {"H3K4me3_N1":"H3K4me3"}
+samples_dict    = {x: config['samples'][x]['Antibody'] for x in config['samples'].keys()}
+
+# antibody: sample hash {'H3K4me3': ['H3K4me3_N1', 'H3K4me3_N2', 'H3K4me3_N3', 'H3K4me3_N4']}
+antibody_dict = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+for x in config['samples'].keys():
+   antibody_dict[config['samples'][x]['Antibody']].append(x)
+
+# antibody: path to cellranger hash {"H3K27ac_M1": "/data/proj/GCB_MB/CT/CT_19_001"}
+cellranger_dict = {config['samples'][x]['Antibody']: [] for x in config['samples'].keys()}
+for x in config['samples'].keys():
+   cellranger_dict[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
+

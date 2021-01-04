@@ -17,7 +17,7 @@ dependencies:
   - cookiecutter
   - graphviz
   - pyyaml
-  - snakemake
+  - snakemake=5.31.1
   - pygenometracks
   - tqdm
   - r-base=3.6.3
@@ -38,4 +38,8 @@ dependencies:
   - bioconductor-bsgenome.mmusculus.ucsc.mm10
   - bioconductor-ensdb.mmusculus.v79
   - bioconductor-ensdb.hsapiens.v86
+  - bioconductor-ggbio
+  - bioconductor-biovizBase
+  - r-data.table
+  - r-ggplot2
   

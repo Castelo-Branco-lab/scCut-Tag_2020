@@ -1,3 +1,10 @@
+include: 'preflight'
+
+
+rule all_preprocess:
+  input:
+    #expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
+    expand("results/{sample}/cell_picking/metadata.csv",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
 rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
@@ -54,36 +61,38 @@ rule macs_merged_for_revision:
   params:
     out_revision = "results/merged/{antibody}/macs/for_revision/"
   shell:
-    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_revision} --nomodel  --max-gap 2500 --nolambda " # --slocal 1000000 --llocal 1000000 "
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_revision} --nomodel  --max-gap 2500 --nolambda 2>&1" # --slocal 1000000 --llocal 1000000 "
 
-rule barcode_statistics_peaks:
+rule barcode_metrics_peaks:
     input:
         bam          = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
         peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
         peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     output:
-        narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
-        broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt"
+        narrow = "results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt",
+        broad  = "results/{sample}/barcode_metrics/peaks_barcodes_broad.txt"
     params:
         scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+        tmpdir     = config['general']['tmpdir'],
     shell:
       #  "set +o pipefail; "
         "bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
-        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.broad} && [[ -s {output.broad} ]] ; "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort -T {params.tmpdir} | uniq -c > {output.broad} && [[ -s {output.broad} ]] ; "
         " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
-        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.narrow} && [[ -s {output.narrow} ]] ;"
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort -T {params.tmpdir} | uniq -c > {output.narrow} && [[ -s {output.narrow} ]] ;"
 
-rule barcode_statistics_all:
+rule barcode_metrics_all:
   input:
      bam       = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
   output:
-    all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt"
+    all_bcd    = "results/{sample}/barcode_metrics/all_barcodes.txt"
   params:
     scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+    tmpdir     = config['general']['tmpdir']
   shell:
     #" set +o pipefail; "
     " samtools view -f2 {input.bam}| "
-    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.all_bcd} && [[ -s {output.all_bcd} ]] "
+    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort -T {params.tmpdir} | uniq -c > {output.all_bcd} && [[ -s {output.all_bcd} ]] "
 
 
 rule merge_bam:
@@ -121,26 +130,33 @@ rule add_barcode_fragments:
 ####### CELLS SELECTION
 rule cell_selection:
   input:
-      all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt",
-      bcd_narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
-      bcd_broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",
+      all_bcd    = "results/{sample}/barcode_metrics/all_barcodes.txt",
+      bcd_narrow = "results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt",
+      bcd_broad  = "results/{sample}/barcode_metrics/peaks_barcodes_broad.txt",
       peaks      = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
-      metadata   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/singlecell.csv',
-      fragments  = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
-      
-      
   output:
-      "results/{sample}/cell_picking/{binwidth}/cells_10x.png",
-      "results/{sample}/cell_picking/{binwidth}/cells_picked.png",
-      "results/{sample}/cell_picking/{binwidth}/cells_picked.bw",
-      "results/{sample}/cell_picking/{binwidth}/cells_not_picked.bw",
-      "results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",
+      "results/{sample}/cell_picking/cells_10x.png",
+      "results/{sample}/cell_picking/cells_picked.png",
+      "results/{sample}/cell_picking/cells_picked.bw",
+      "results/{sample}/cell_picking/cells_not_picked.bw",
+      "results/{sample}/cell_picking/metadata.csv",
   params:
-      script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
-      out_prefix     = "results/{sample}/cell_picking/{binwidth}/", 
+      script         = os.path.dirname(workflow.basedir) + '/scripts/R/pick_cells.R',
+      out_prefix     = "results/{sample}/cell_picking/", 
       config_file    = config_file,
   shell:
-      "Rscript {params.script}  --sample {wildcards.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {wildcards.binwidth}"
+      "Rscript {params.script}  --sample {wildcards.sample} --config {params.config_file} --out_prefix {params.out_prefix}"
 
 
-
+rule create_seurat_object:
+  input:
+    metadata   = "results/{sample}/cell_picking/metadata.csv",
+    fragments  = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
+  output:
+    "results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds",
+  params:
+    script         = os.path.dirname(workflow.basedir) + '/scripts/R/create_seurat_object.R',
+    out_prefix     = "results/{sample}/seurat/bin_{binwidth}/",
+    config_file    = config_file,
+  shell:
+    "Rscript {params.script} --sample {wildcards.sample} --metadata {input.metadata} --config {params.config_file} --out_prefix {params.out_prefix} --window {wildcards.binwidth}"

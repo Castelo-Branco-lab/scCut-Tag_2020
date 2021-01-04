@@ -173,7 +173,7 @@ rule call_peaks_kaya_okur_FrIP:
 
 rule intersect_kaya_okur_fragments_with_peaks:
   input:
-    peaks=directory("results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/"),
+    peaks="results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/{sample}_peaks.narrowPeak",
     fragments="results/other_datasets/kaya_okur/bed/sorted_{sample}.bed.gz",
   output:
     all_fragments  = "results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",
@@ -183,7 +183,7 @@ rule intersect_kaya_okur_fragments_with_peaks:
   shell:
     """
     zcat {input.fragments} | cut -f4 | sort | uniq -c > {output.all_fragments} 
-    bedtools intersect -a {input.fragments} -b {input.peaks}{params.sample}_peaks.narrowPeak -wa | cut -f4 | sort | uniq -c > {output.peak_fragments}
+    bedtools intersect -a {input.fragments} -b {input.peaks} -wa | cut -f4 | sort | uniq -c > {output.peak_fragments}
     """
 
 

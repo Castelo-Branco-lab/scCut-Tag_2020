@@ -1,20 +1,3 @@
-# Preprocessing of the H3K4me3 dataset
-
-
-print(.libPaths())
-
-if (!'Signac' %in% rownames(installed.packages())){
-  cat("Installing missing package Signac \n")
-  install.packages('Signac',repos='http://cran.us.r-project.org')
-}
-
-if (!'harmony' %in% rownames(installed.packages())){
-  cat("Installing missing package harmony \n")
-  devtools::install_github("immunogenomics/harmony")
-}
-
-
-
 cat("*** Loading libraries")
 suppressMessages({
 library(argparse);
@@ -25,9 +8,7 @@ library(viridis);
 library(ggplot2);
 library(dplyr);
 library(BSgenome.Mmusculus.UCSC.mm10)
-# library(BSgenome.Mmusculus.UCSC.mm10);
-  }
-)
+})
 
 set.seed(1234)
 
@@ -41,7 +22,7 @@ parser$add_argument("-s", "--sample", type="character", default='foo',
 parser$add_argument("-c", "--config", type="character", default='config/config.yaml', 
                     help="maximum number of reads in cell")
 
-parser$add_argument("-o", "--out_prefix", type="character", default="100000_UMI", 
+parser$add_argument("-o", "--out_prefix", type="character", default="10000", 
                     help="folder for the output in clustering_snakemake folder")
 
 parser$add_argument("-w", "--window", type="integer", default=10000, 
