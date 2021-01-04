@@ -1,0 +1,146 @@
+rule bam_to_bw:
+    input:
+        lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    output:
+        "results/{sample}/bigwig/all_reads.bw"
+    threads: 8
+    shell:
+        "bamCoverage -b {input} -o {output} -p {threads} --minMappingQuality 5 "
+        " --binSize 100 --centerReads --smoothLength 500 --normalizeUsing RPKM --ignoreDuplicates"
+
+
+rule run_macs_narrow:
+    input:
+       lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+    output:
+        "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
+    params:
+        macs_outdir = "results/{sample}/macs/narrow"
+    shell:
+        "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
+        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
+        
+
+rule run_macs_broad:
+    input:
+        lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
+    output:
+        "results/{sample}/macs/broad/{sample}_peaks.broadPeak"
+    params:
+        macs_outdir = "results/{sample}/macs/broad"
+    shell:
+        "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.sample} "
+        "--outdir {params.macs_outdir} -q 0.05 -B --SPMR --keep-dup=1 --broad-cutoff=0.1 --broad 2>&1 "
+
+rule macs_merged:
+  input:
+    lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
+  output:
+    "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+    "results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak",
+    "results/merged/{antibody}/macs/narrow/{antibody}_summits.bed",
+  params:
+    out_narrow   = "results/merged/{antibody}/macs/narrow/",
+    out_broad    = "results/merged/{antibody}/macs/broad/",
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_narrow} -q 0.05 -B --SPMR --keep-dup=1 2>&1 && "
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_broad} --broad-cutoff=0.1 --broad -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
+
+rule macs_merged_for_revision:
+  input:
+    lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
+  output:
+    "results/merged/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak",
+  params:
+    out_revision = "results/merged/{antibody}/macs/for_revision/"
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_revision} --nomodel  --max-gap 2500 --nolambda " # --slocal 1000000 --llocal 1000000 "
+
+rule barcode_statistics_peaks:
+    input:
+        bam          = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+        peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
+        peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
+    output:
+        narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
+        broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt"
+    params:
+        scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+    shell:
+      #  "set +o pipefail; "
+        "bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.broad} && [[ -s {output.broad} ]] ; "
+        " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
+        " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.narrow} && [[ -s {output.narrow} ]] ;"
+
+rule barcode_statistics_all:
+  input:
+     bam       = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+  output:
+    all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt"
+  params:
+    scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+  shell:
+    #" set +o pipefail; "
+    " samtools view -f2 {input.bam}| "
+    " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort | uniq -c > {output.all_bcd} && [[ -s {output.all_bcd} ]] "
+
+
+rule merge_bam:
+    input:
+        lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
+    output:
+        "results/merged/{antibody}/possorted_bam.bam"
+    threads: 8
+    shell:
+        "samtools merge --threads {threads} {output} {input} && samtools index {output}" 
+
+rule merge_fragments:
+    input:
+        lambda wildcards: ['results/' + x + '/outs/fragments.tsv.gz' for x in antibody_dict[wildcards.antibody] ]
+    output:
+        "results/merged/{antibody}/fragments.tsv.gz"
+    shell:
+        "gunzip -c {input} | sort -k1,1 -k2,2n | bgzip  > {output} && "
+        "tabix -p bed {output}" 
+
+
+rule add_barcode_fragments:
+    input:
+        fragments = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz'
+    output:
+        fragments = "results/{sample}/outs/fragments.tsv.gz",
+        index     = "results/{sample}/outs/fragments.tsv.gz.tbi"
+    params:
+        script         = os.path.dirname(workflow.basedir) + '/scripts/add_sample_to_fragments.py',
+    shell:
+      #  "set +o pipefail; "
+        "python3 {params.script} {input.fragments} {wildcards.sample} | bgzip > {output.fragments}; "
+        "tabix -p bed {output.fragments}"
+
+####### CELLS SELECTION
+rule cell_selection:
+  input:
+      all_bcd    = "results/{sample}/barcode_statistics/all_barcodes.txt",
+      bcd_narrow = "results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",
+      bcd_broad  = "results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",
+      peaks      = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
+      metadata   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/singlecell.csv',
+      fragments  = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/fragments.tsv.gz',
+      
+      
+  output:
+      "results/{sample}/cell_picking/{binwidth}/cells_10x.png",
+      "results/{sample}/cell_picking/{binwidth}/cells_picked.png",
+      "results/{sample}/cell_picking/{binwidth}/cells_picked.bw",
+      "results/{sample}/cell_picking/{binwidth}/cells_not_picked.bw",
+      "results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",
+  params:
+      script         = os.path.dirname(workflow.basedir) + '/scripts/R/process_cellranger.R',
+      out_prefix     = "results/{sample}/cell_picking/{binwidth}/", 
+      config_file    = config_file,
+  shell:
+      "Rscript {params.script}  --sample {wildcards.sample} --config {params.config_file} --out_prefix {params.out_prefix} --window {wildcards.binwidth}"
+
+
+
