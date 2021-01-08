@@ -1,31 +1,63 @@
 ---
-title: "integration_H3K4me3_marques"
-author: "Marek"
-date: "1/5/2021"
-output: html_document
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(EnsDb.Mmusculus.v79)
+library(ensembldb)
+library(GenomicRanges)
+library(dplyr)
+library(gridExtra)
+set.seed(2020)
 ```
 
 
-#### TODO split marques analysis and H3K4me3 integration into 2 scripts
-
-# Integration with H3K4me3
-
-```{r load_H3K4me3}
+```{r}
 brain.H3K4me3 <- readRDS(file = paste0(params$out_prefix,"H3K4me3/clustering/01.clustering.Rds"))
+
+brain.RNA.matrix      <- read.table(gzfile(paste0(params$out_prefix,'marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz')),stringsAsFactors = FALSE)
+brain.RNA.annotations <- readRDS(file =paste0(params$out_prefix,'marques_RNA/data/Marques2016annotation.rds'))
+
+colnames(brain.RNA.matrix) <- gsub("-","_",sub('-','',gsub("C1-","",brain.RNA.matrix[1,])))
+brain.RNA.matrix           <- brain.RNA.matrix[-1,]
+rownames(brain.RNA.matrix) <- brain.RNA.matrix[,1]
+brain.RNA.matrix           <- brain.RNA.matrix[,-1]
+
+brain.RNA <- CreateSeuratObject(counts = brain.RNA.matrix,meta.data = brain.RNA.annotations,assay = 'RNA')
 ```
 
+```{r}
+all.genes <- rownames(brain.RNA)
+
+brain.RNA <- NormalizeData(brain.RNA, normalization.method = "LogNormalize", scale.factor = 10000)
+brain.RNA <- FindVariableFeatures(brain.RNA, selection.method = "vst", nfeatures = 2000)
+brain.RNA <- ScaleData(brain.RNA, features = all.genes)
+brain.RNA <- RunPCA(brain.RNA, features = VariableFeatures(object = brain.RNA))
+
+brain.RNA <- RunUMAP(brain.RNA, dims = 1:20)
+DimPlot(brain.RNA, reduction = "umap",group.by = 'cell_class')
+
+```
+
+# Remove cells from periphery
 
 ```{r,fig.width=8,fig.height=4}
-
 p1 <- DimPlot(brain.H3K4me3,label=TRUE) + NoLegend()
 p2 <- DimPlot(brain.RNA,label=TRUE,group.by='cell_class',repel=TRUE) + NoLegend()
 p1+p2
 ```
-
+```{r}
+brain.RNA$cell_type <- brain.RNA$cell_class
+brain.RNA$antibody <- 'RNA-seq'
+```
 
 ```{r}
 brain.H3K4me3.OL <- brain.H3K4me3[,brain.H3K4me3$cell_type %in% c("mOL","OPC")]
@@ -40,6 +72,29 @@ DimPlot(brain.H3K4me3.OL)
 
 
 
+```{r, fig.width=12,fig.height=12}
+brain.RNA@active.ident <- brain.RNA$cell_type
+markers                <- FindAllMarkers(brain.RNA)
+markers.pos            <- markers[markers$p_val < 0.05 & markers$avg_logFC > 0.5,]
+
+write.csv2(x = markers, file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
+
+new_ids <- as.character(brain.RNA$cell_class)
+
+new_ids[new_ids == 'NFOL2'] <- 'NFOL'
+new_ids[new_ids == 'NFOL1'] <- 'NFOL'
+new_ids[new_ids == 'MFOL2'] <- 'MFOL'
+new_ids[new_ids == 'MFOL1'] <- 'MFOL'
+#new_ids[new_ids == 'MOL5']  <- 'MOL56'
+#new_ids[new_ids == 'MOL6']  <- 'MOL56'
+
+
+brain.RNA <- SetIdent(brain.RNA,cells = names(new_ids),value = new_ids)
+DimPlot(brain.RNA)
+
+markers <- FindAllMarkers(brain.RNA)
+write.csv2(x =  markers,file = paste0(params$out_prefix,"marques_RNA/clustering/markers_merged_clusters.csv"))
+```
 
 ```{r, fig.width=12,fig.height=12}
 
@@ -133,5 +188,19 @@ do.call(grid.arrange,c(p.ls[c(8,1,7,2,6,4)],'ncol'=6))
 
 
 ```{r}
+saveRDS(object = brain.RNA,file = paste0(params$out_prefix,"marques_RNA/clustering/01.clustering.Rds"))
 saveRDS(object = coembed,file = paste0(params$out_prefix,"integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds"))
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
