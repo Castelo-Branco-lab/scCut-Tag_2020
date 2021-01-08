@@ -9,6 +9,7 @@ include: 'snakefile_grosselin'
 include: 'snakefile_integration'
 include: 'snakefile_other_datasets'
 include: 'snakefile_figures'
+include: 'snakefile_scRNA-seq'
 
 rule all:
   input:
@@ -37,14 +38,7 @@ rule all:
     
     #Clustering
     #expand("results/{sample}/cell_picking/{binwidth}/Seurat_object.Rds",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()),
-
-    # RNA-seq clustering
-    'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
-    expand('results/{RNA}/marker_promoters/',RNA=["Sten_RNA","Sox10_RNA"]),
     
-    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
-    'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
-
     # Clustering final Cut&Tag
     expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
 
@@ -704,148 +698,6 @@ rule cicero:
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
 
-
-
-
-
-#############################################
-################# scRNA-seq #################
-#############################################
-
-# Mouse brain atlas SL lab
-
-
-rule Sten_download:
-  output:
-    loom = 'results/Sten_RNA/l5_all.loom'
-  params:
-    download_folder = CWD + '/results/Sten_RNA/',
-    loom_url        = config['RNA_seq']['Sten_RNA']['loom_source']
-  shell:
-    'wget {params.loom_url}  -P {params.download_folder}'
-
-rule Sten_RNA_clustering:
-  input:
-    config['RNA_seq']['Sten_RNA']['loom_file']
-  output:
-    #report      = 'results/Sten_RNA/01.clustering.html',
-    R_object    = 'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
-    markers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv'
-  params:
-    config      = config_file,
-    notebook    = os.path.dirname(workflow.basedir) + '/notebooks/Sten_RNA/01.clustering.Rmd',
-    out_prefix  = CWD + '/results/',
-    report      = CWD + '/results/Sten_RNA/01.clustering.html',
-
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}'))\""
-
-rule export_marker_promoters_Sten:
-  input:
-    markers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/Sten_RNA/RNA_marker_promoters_export.Rmd',
-  output:
-    directory('results/Sten_RNA/marker_promoters/'),
-  params:
-    report     = CWD + '/results/Sten_RNA/RNA_marker_promoters_export.html',
-    out_prefix = CWD + '/results/',
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
-
-######## Sox10 RNA
-
-rule Sox10_RNA_clustering:
-  input:
-    rep1 = config['RNA_seq']['Sox10_RNA']['replicate1'],
-    rep2 = config['RNA_seq']['Sox10_RNA']['replicate2']
-  output:
-    # report       = 'results/Sox10_RNA/01.clustering.html',
-    R_object_all = 'results/Sox10_RNA/clustering/all_cells/01.clustering.Rds',
-    markers_all  = 'results/Sox10_RNA/clustering/all_cells/markers.csv',
-    heatmap_all  = 'results/Sox10_RNA/clustering/all_cells/heatmap.png',
-    R_object_GFP = 'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
-    markers_GFP  = 'results/Sox10_RNA/clustering/GFP/markers.csv',
-    heatmap_GFP  = 'results/Sox10_RNA/clustering/GFP/heatmap.png',
-
-  params: # Absolute paths here
-    config       = config_file,
-    notebook     = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/01.clustering.Rmd',
-    out_prefix   = CWD + '/results/Sox10_RNA/clustering/',
-    report       = CWD + '/results/Sox10_RNA/01.clustering.html',
-
-
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}'))\""
-
-rule Sox10_RNA_TPM:
-  input:
-    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds'
-  output:
-    'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv'
-  params:
-    script = os.path.dirname(workflow.basedir) + "/scripts/R/Seurat_TPM.R",
-  shell:
-    'Rscript {params.script} {input} {output}'
-
-rule export_marker_promoters_Sox10:
-  input:
-    markers     = 'results/Sox10_RNA/clustering/GFP/markers.csv',
-    notebook    = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/RNA_marker_promoters_export.Rmd',
-  output:
-    directory('results/Sox10_RNA/marker_promoters/'),
-  params:
-    report     = CWD + '/results/Sox10_RNA/RNA_marker_promoters_export.html',
-    out_prefix = CWD + '/results/',
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
-
-# Integration Sox10 - SL scRNA-seq
-
-rule integrate_scRNA_seq:
-  input:
-    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
-    'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
-    notebook = os.path.dirname(workflow.basedir) + '/notebooks/Sox10_RNA/integration_2RNA.Rmd',
-  output:
-    'results/"Sox10_RNA/integration/scRNA_integrated.Rds'
-  params:
-    report     = 'results/"Sox10_RNA/integration/scRNA_integrated.html',
-    out_prefix =  CWD + '/results/'
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
-
-############### Marques RNA
-
-rule download_marques:
-  output:
-    metadata = 'results/marques_RNA/data/Marques2016annotation.rds',
-    matrix   = 'results/marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz',
-  params:
-    url    = config['RNA_seq']['Marques_RNA']['url'],
-    annot  = os.path.dirname(workflow.basedir) + '/data/Marques2016annotation.rds',
-    outdir = 'results/marques_RNA/data/'
-  shell:
-    "wget -P {params.outdir} {params.url}; "
-    "cp {params.annot} {params.outdir}"
-
-rule marques_proccess_and_integrate:
-  input:
-    'results/marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz',
-    'results/marques_RNA/data/Marques2016annotation.rds',
-    notebook   = os.path.dirname(workflow.basedir) + '/notebooks/integration/integration_H3K4me3_marques.Rmd',
-  output:
-    'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
-    'results/marques_RNA/clustering/01.clustering.Rds',
-    "results/marques_RNA/clustering/markers_merged_clusters.csv",
-    "results/marques_RNA/clustering/markers.csv",
-  params:
-    report     = CWD + '/results/integration/H3K4me3_marques/H3K4me3_marques_coembed.html',
-    out_prefix = CWD + '/results/'
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
-
-
-
 ################ scATAC-seq
 
 rule download_ATAC:  
@@ -880,7 +732,7 @@ rule analyze_ATAC:
 
 
 
-
+# TODO rule H3K4me3 integaration with marques RNA 
 
 
 

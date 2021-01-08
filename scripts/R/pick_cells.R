@@ -1,9 +1,11 @@
-cat("*** Loading libraries")
-library(argparse);
+cat("*** Loading libraries*** \n")
+library(argparse)
 library(yaml)
-#library(Seurat);
-library(Signac);
-library(ggplot2);
+library(Signac)
+library(ggplot2)
+library(rtracklayer)
+library(GenomicRanges)
+
 
 # Source aux functions
 args <- commandArgs(trailingOnly=FALSE)
@@ -44,14 +46,11 @@ cutoff_reads_max            = config$samples[[args$sample]]$clustering_params$ma
 cutoff_peak_percentage_low  = config$samples[[args$sample]]$clustering_params$min_peaks_ratio
 cutoff_peak_percentage_high = config$samples[[args$sample]]$clustering_params$max_peaks_ratio
 
-ndim = 30
-window  = args$window
 
+# TODO move to seurat object creation
 fragments <- paste0(config$samples[[args$sample]]$cellranger_out,'/outs/fragments.tsv.gz')
-assay = "peaksMB"
-
-
-if (!file.exists(fragments)) {stop(paste0("Fragments file does not exist: ",fragments))}
+#assay = "peaksMB"
+#if (!file.exists(fragments)) {stop(paste0("Fragments file does not exist: ",fragments))}
 
 
 # Load ensembl annotation

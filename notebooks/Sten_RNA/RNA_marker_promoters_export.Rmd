@@ -38,6 +38,7 @@ clusters_to_use <- c(
 ```
 
 ```{r export_promoters}
+dir.create(paste0(params$out_prefix,"/Sten_RNA/marker_promoters/"),recursive = TRUE)
 conversion.table <- as.data.frame(genes(EnsDb.Mmusculus.v79))[,c("gene_name","symbol")]
 
 genes.promoters <- promoters(EnsDb.Mmusculus.v79)
@@ -48,7 +49,7 @@ lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == gsub("[0-9]+.","",x),]
   markers.x <- head(markers.x,100)
   promoters.x <- genes.promoters[genes.promoters$symbol %in% markers.x$gene]
-  rtracklayer::export(object = promoters.x,con = paste0(params$out_prefix,"/Sten_RNA/marker_promoters/",x,"_promoters.bed"))
+  rtracklayer::export(object = promoters.x, con = paste0(params$out_prefix,"/Sten_RNA/marker_promoters/",x,"_promoters.bed"))
 })
 
 ```

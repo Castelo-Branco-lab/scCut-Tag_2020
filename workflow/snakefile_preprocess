@@ -63,13 +63,11 @@ rule macs_merged_for_revision:
   shell:
     "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_revision} --nomodel  --max-gap 2500 --nolambda 2>&1" # --slocal 1000000 --llocal 1000000 "
 
-rule barcode_metrics_peaks:
+rule barcode_overlap_broad:
     input:
         bam          = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
         peaks_broad  = "results/{sample}/macs/broad/{sample}_peaks.broadPeak",
-        peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
     output:
-        narrow = "results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt",
         broad  = "results/{sample}/barcode_metrics/peaks_barcodes_broad.txt"
     params:
         scripts    = os.path.dirname(workflow.basedir) + '/scripts',
@@ -78,6 +76,16 @@ rule barcode_metrics_peaks:
       #  "set +o pipefail; "
         "bedtools intersect -abam {input.bam} -b {input.peaks_broad} -u | samtools view -f2 | "
         " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort -T {params.tmpdir} | uniq -c > {output.broad} && [[ -s {output.broad} ]] ; "
+rule barcode_overlap_narrow:
+    input:
+        bam          = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
+        peaks_narrow = "results/{sample}/macs/narrow/{sample}_peaks.narrowPeak"
+    output:
+        narrow = "results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt",
+    params:
+        scripts    = os.path.dirname(workflow.basedir) + '/scripts',
+        tmpdir     = config['general']['tmpdir'],
+    shell:
         " bedtools intersect -abam {input.bam} -b {input.peaks_narrow} -u | samtools view -f2 | "
         " awk -f {params.scripts}/get_cell_barcode.awk | sed 's/CB:Z://g' | sort -T {params.tmpdir} | uniq -c > {output.narrow} && [[ -s {output.narrow} ]] ;"
 

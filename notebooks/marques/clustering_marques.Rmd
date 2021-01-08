@@ -11,18 +11,16 @@ params:
 library(Seurat)
 library(Signac)
 library(ggplot2)
-library(EnsDb.Mmusculus.v79)
-library(ensembldb)
-library(GenomicRanges)
-library(dplyr)
-library(gridExtra)
+#library(EnsDb.Mmusculus.v79)
+#library(ensembldb)
+#library(GenomicRanges)
+#library(dplyr)
+#library(gridExtra)
 set.seed(2020)
 ```
 
 
-```{r}
-brain.H3K4me3 <- readRDS(file = paste0(params$out_prefix,"H3K4me3/clustering/01.clustering.Rds"))
-
+```{r Create_marques_seurat_object}
 brain.RNA.matrix      <- read.table(gzfile(paste0(params$out_prefix,'marques_RNA/data/GSE75330_Marques_et_al_mol_counts2.tab.gz')),stringsAsFactors = FALSE)
 brain.RNA.annotations <- readRDS(file =paste0(params$out_prefix,'marques_RNA/data/Marques2016annotation.rds'))
 
@@ -34,7 +32,7 @@ brain.RNA.matrix           <- brain.RNA.matrix[,-1]
 brain.RNA <- CreateSeuratObject(counts = brain.RNA.matrix,meta.data = brain.RNA.annotations,assay = 'RNA')
 ```
 
-```{r}
+```{r seurat_dimreduce}
 all.genes <- rownames(brain.RNA)
 
 brain.RNA <- NormalizeData(brain.RNA, normalization.method = "LogNormalize", scale.factor = 10000)
@@ -47,150 +45,39 @@ DimPlot(brain.RNA, reduction = "umap",group.by = 'cell_class')
 
 ```
 
-# Remove cells from periphery
-
-```{r,fig.width=8,fig.height=4}
-p1 <- DimPlot(brain.H3K4me3,label=TRUE) + NoLegend()
-p2 <- DimPlot(brain.RNA,label=TRUE,group.by='cell_class',repel=TRUE) + NoLegend()
-p1+p2
-```
-```{r}
+```{r add_metadata}
 brain.RNA$cell_type <- brain.RNA$cell_class
 brain.RNA$antibody <- 'RNA-seq'
 ```
 
-```{r}
-brain.H3K4me3.OL <- brain.H3K4me3[,brain.H3K4me3$cell_type %in% c("mOL","OPC")]
-
-brain.H3K4me3.OL <- FindTopFeatures(brain.H3K4me3.OL,min.cutoff = 'q5')
-brain.H3K4me3.OL <- RunTFIDF(brain.H3K4me3.OL)
-brain.H3K4me3.OL <- RunSVD(brain.H3K4me3.OL, reduction.key = 'LSI_',reduction.name = 'lsi')
-brain.H3K4me3.OL <- RunUMAP(brain.H3K4me3.OL,reduction = 'lsi', dims=2:30)
-
-DimPlot(brain.H3K4me3.OL)
-```
-
-
-
-```{r, fig.width=12,fig.height=12}
+```{r find_markers, fig.width=12,fig.height=12}
 brain.RNA@active.ident <- brain.RNA$cell_type
 markers                <- FindAllMarkers(brain.RNA)
 markers.pos            <- markers[markers$p_val < 0.05 & markers$avg_logFC > 0.5,]
 
-write.csv2(x = markers, file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
 
+# Merge NFOL and MFOL identities
 new_ids <- as.character(brain.RNA$cell_class)
-
 new_ids[new_ids == 'NFOL2'] <- 'NFOL'
 new_ids[new_ids == 'NFOL1'] <- 'NFOL'
 new_ids[new_ids == 'MFOL2'] <- 'MFOL'
 new_ids[new_ids == 'MFOL1'] <- 'MFOL'
-#new_ids[new_ids == 'MOL5']  <- 'MOL56'
-#new_ids[new_ids == 'MOL6']  <- 'MOL56'
-
 
 brain.RNA <- SetIdent(brain.RNA,cells = names(new_ids),value = new_ids)
 DimPlot(brain.RNA)
 
-markers <- FindAllMarkers(brain.RNA)
-write.csv2(x =  markers,file = paste0(params$out_prefix,"marques_RNA/clustering/markers_merged_clusters.csv"))
+markers.merged <- FindAllMarkers(brain.RNA)
 ```
 
-```{r, fig.width=12,fig.height=12}
-
-markers.pos <- markers %>% group_by(cluster) %>% dplyr::filter(p_val_adj < 0.05 & avg_logFC > 0) %>% dplyr::top_n(n = 200,wt = p_val_adj)
-
-cluster.scores.ls <- lapply(unique(markers.pos$cluster),function(x){
-  markers.x <- markers.pos[markers.pos$cluster==x,]
-  genes.x   <- markers.x$gene
-  Matrix::colSums(brain.H3K4me3.OL[['GA']]@counts[rownames(brain.H3K4me3.OL[['GA']]) %in% genes.x,]) / 10^brain.H3K4me3.OL$logUMI
-})
-
-
-
-cluster.scores           <- as.data.frame(do.call(cbind,cluster.scores.ls))
-colnames(cluster.scores) <- unique(markers.pos$cluster)
-
-brain.H3K4me3.OL <- AddMetaData(brain.H3K4me3.OL,cluster.scores)
-
-
-p.ls <- lapply(colnames(cluster.scores),function(x){
-  FeaturePlot(brain.H3K4me3.OL,x,max.cutoff = quantile(brain.H3K4me3.OL@meta.data[,x],0.8)) + scale_color_viridis_c()
-})
-
-do.call(grid.arrange,p.ls)
-
-```
-
-
-```{r,fig.width=10,fig.height=5}
-DefaultAssay(brain.H3K4me3.OL) <- "GA"
-
-rm(transfer.anchors)
-rm(inputation)
-rm(coembed)
-
-common.genes <- intersect(rownames(brain.H3K4me3.OL),rownames(brain.RNA))
-
-transfer.anchors <- FindTransferAnchors(
-  reference = brain.RNA,
-  query = brain.H3K4me3.OL,
-  reduction = 'cca',
-  query.assay = 'GA',reference.assay = 'RNA',
-  k.filter = NA,features = common.genes
-)
-
-genes.use <- VariableFeatures(brain.RNA)
-refdata <- GetAssayData(brain.RNA, assay = "RNA", slot = "data")[genes.use, ]
-
-imputation <- TransferData(anchorset = transfer.anchors, refdata = refdata, weight.reduction = brain.H3K4me3.OL[["lsi"]])
-
-brain.H3K4me3.OL[['RNA']] <- imputation
-coembed <- merge(x = brain.RNA, y = brain.H3K4me3.OL)
-
-coembed <- ScaleData(coembed, features = genes.use, do.scale = FALSE)
-coembed <- RunPCA(coembed, features = genes.use, verbose = FALSE)
-coembed <- RunUMAP(coembed, dims = 1:30)
-
-DimPlot(brain.RNA)
-DimPlot(coembed,group.by= 'antibody')
-DimPlot(coembed,group.by = 'cell_type') + NoLegend()
-
-p1 <- DimPlot(coembed[,coembed$antibody == "H3K4me3"],group.by='cell_type',label=TRUE,repel=TRUE) + NoLegend()
-p2 <- DimPlot(coembed[,coembed$orig.ident == "SeuratProject"],group.by='cell_type',label=TRUE,repel=TRUE) + NoLegend()
-
-p1+p2
-
-
-
-```
-
-```{r,fig.width=4,fig.height=4}
-coembed <- AddMetaData(coembed,cluster.scores)
-
-p.ls <- lapply(colnames(cluster.scores),function(x){
-  coembed.x <- coembed[,coembed$antibody == "H3K4me3"] 
-  FeaturePlot(object = coembed.x,features = x,max.cutoff = quantile(coembed.x@meta.data[,x],0.9),min.cutoff = quantile(coembed.x@meta.data[,x],0.1),pt.size=1) + 
-    #scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = median(coembed.x@meta.data[,x])) + 
-    scale_color_viridis_c() + 
-    theme(legend.position = 'bottom')
-})
-
-
-p.ls
-```
-
-```{r, fig.width=24,fig.height=4}
-do.call(grid.arrange,c(p.ls[c(8,1,7,2,6,4)],'ncol'=6))
-
-```
-
-
-
-```{r}
+```{r export}
+# Export
+write.csv2(x = markers, file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"))
+write.csv2(x =  markers.merged,file = paste0(params$out_prefix,"marques_RNA/clustering/markers_merged_clusters.csv"))
 saveRDS(object = brain.RNA,file = paste0(params$out_prefix,"marques_RNA/clustering/01.clustering.Rds"))
-saveRDS(object = coembed,file = paste0(params$out_prefix,"integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds"))
 ```
+
+
+
 
 
 
