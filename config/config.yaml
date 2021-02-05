@@ -213,13 +213,13 @@ RNA_seq:
 ATAC_seq:
   P50:
     url:
-      matrix_h5_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5
-      matrix_url:           https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.tar.gz
-      fragments_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz
-      fragments_index_url:  https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz.tbi
-      metadata_url:         https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_singlecell.csv
-      bam_url:              https://cg.10xgenomics.comamples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
-      bam_index_url:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai
+      matrix_h5:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5
+      matrix:           https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.tar.gz
+      fragments:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz
+      fragments_index:  https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz.tbi
+      metadata:         https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_singlecell.csv
+      bam:              https://cg.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam
+      bam_index:        https://cf.10xgenomics.com/samples/cell-atac/1.2.0/atac_v1_adult_brain_fresh_5k/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai
 
 grosselin:
   scChIP:

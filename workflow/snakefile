@@ -543,15 +543,15 @@ rule metagene_RNA_promoters:
     "computeMatrix scale-regions -S {input.bigwig}*.bw -R {input.promoters}*_genes.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
     "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
 
-rule export_bam:
+rule export_bam_per_cluster: 
   input:
-    bam   = lambda wildcards: 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam' if wildcards.antibody == 'scATAC_P50' else (config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'),
+    bam   = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam',
     table = 'results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv',
   output:
     sam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
   params:
     filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
-    sample              =   lambda wildcards: "NA" if wildcards.antibody == "scATAC_P50" else wildcards.sample,
+    sample              =   lambda wildcards: wildcards.sample,
   shell:
     "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.sam_files}; "
 
@@ -697,38 +697,6 @@ rule cicero:
     out_prefix  = CWD + '/results/',
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
-
-################ scATAC-seq
-
-rule download_ATAC:  
-  output:
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam'
-  params:
-    url = " ".join(list(config['ATAC_seq']['P50']['url'].values()))
-  shell:
-    'wget -P {output} {params.url}'
-
-rule analyze_ATAC:
-  input:
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
-    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
-    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
-  output:
-    seurat_object = 'results/scATAC_P50/clustering/clustering_scATAC.Rds',
-    bigwig        = directory('results/scATAC_P50/clustering/bigwig/'),
-    barcode_table = 'results/scATAC_P50/clustering/bam_per_cluster/cluster_barcode_table.csv',
-  params:
-    notebook      = os.path.dirname(workflow.basedir) + '/notebooks/scATAC/01.clustering.Rmd',
-    out_prefix    = CWD + '/results/',
-    report        = CWD + '/results/scATAC_P50/clustering/01.clustering.html',
-  shell:
-    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
-
-
 
 
 

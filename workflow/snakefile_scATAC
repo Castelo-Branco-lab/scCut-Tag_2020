@@ -1,0 +1,64 @@
+include: "preflight"
+
+localrules: download_ATAC
+
+rule scATAC_all:
+  input:
+    'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+    'results/scATAC_P50/clustering/bam_per_cluster/scATAC/'
+    
+
+rule download_ATAC:  
+  output:
+    matrix_h5       = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
+    metadata        = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
+    fragments       = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+    fragments_index = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz.tbi',
+    bam             = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam',
+    bam_index       = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam.bai'
+  params:
+    url_matrix_h5                 = config['ATAC_seq']['P50']['url']['matrix_h5'],
+    url_fragments                 = config['ATAC_seq']['P50']['url']['fragments'],
+    url_fragments_index           = config['ATAC_seq']['P50']['url']['fragments_index'],
+    url_metadata                  = config['ATAC_seq']['P50']['url']['metadata'],
+    url_bam                       = config['ATAC_seq']['P50']['url']['bam'],
+    url_bam_index                 = config['ATAC_seq']['P50']['url']['bam_index'],
+  shell:
+    'wget -O {output.matrix_h5}       {params.url_matrix_h5};'
+    'wget -O {output.fragments}       {params.url_fragments};'
+    'wget -O {output.fragments_index} {params.url_fragments_index};'
+    'wget -O {output.metadata}        {params.url_metadata};'
+    'wget -O {output.bam}             {params.url_bam};'
+    'wget -O {output.bam_index}       {params.url_bam_index};'
+
+rule analyze_ATAC:
+  input:
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_singlecell.csv',
+    'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz',
+    'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+  output:
+    seurat_object = 'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+    bigwig        = directory('results/scATAC_P50/clustering/bigwig/'),
+    barcode_table = 'results/scATAC_P50/clustering/bam_per_cluster/cluster_barcode_table.csv',
+  params:
+    notebook      = os.path.dirname(workflow.basedir) + '/notebooks/scATAC/01.clustering.Rmd',
+    out_prefix    = CWD + '/results/',
+    report        = CWD + '/results/scATAC_P50/clustering/01.clustering.html',
+    foo           = os.path.dirname(workflow.basedir) + '/scripts/R/foo.R',
+  shell:
+    # 'Rscript {params.foo}'
+    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""
+
+rule export_bam_per_cluster: 
+  input:
+    bam   = 'results/scATAC_P50/data/atac_v1_adult_brain_fresh_5k_possorted_bam.bam',
+    table = 'results/scATAC_P50/clustering/bam_per_cluster/cluster_barcode_table.csv',
+  output:
+    bam_files  = directory('results/{antibody}/clustering/bam_per_cluster/{sample}/'),
+  params:
+    filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
+    sample              =   "scATAC_P50"
+  shell:
+    "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.bam_files}; "
+

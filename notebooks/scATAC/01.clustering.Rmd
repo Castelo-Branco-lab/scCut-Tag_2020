@@ -6,12 +6,22 @@ params:
   antibody: 'scATAC_P50'
 ---
 
-```{r}
+```{r libraries}
 library(Seurat)
 library(Signac)
 library(EnsDb.Mmusculus.v79)
 library(ggplot2)
+library(viridis)
+library(GenomicRanges)
+set.seed(2020)
 ```
+
+
+```{r source_functions}
+source("../../scripts/R/func.R")
+```
+
+
 
 ```{r}
 counts <- Read10X_h5(paste0(params$out_prefix,"scATAC_P50/data/atac_v1_adult_brain_fresh_5k_filtered_peak_bc_matrix.h5"))
@@ -23,18 +33,21 @@ metadata <- read.csv(
 
 fragment.path <- paste0(params$out_prefix,"scATAC_P50/data/atac_v1_adult_brain_fresh_5k_fragments.tsv.gz")
 
-brain <- CreateSeuratObject(
+brain_assay <- CreateChromatinAssay(
   counts = counts,
+  sep = c(":", "-"),
+  genome = 'mm10',
+  fragments = fragment.path,
+  min.cells=1
+  )
+
+brain <- CreateSeuratObject(
+  counts = brain_assay,
   assay = 'peaks',
-  project = 'ATAC',
-  min.cells = 1,
   meta.data = metadata
 )
 
-brain <- SetFragments(
-  object = brain,
-  file = fragment.path
-)
+
 ```
 
 ```{r}
@@ -55,62 +68,29 @@ DimPlot(object = brain, label = TRUE) + NoLegend()
 
 
 ```{r load_gene_annotations}
-gene.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "protein_coding")
-lncRNA.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "lincRNA")
-gene.coords <- c(gene.coords,lncRNA.coords)
+genebodyandpromoter.coords.flat <- load_ensembl_annot()
+brain <- createFeatureAssay(seurat_object = brain,
+                            features = genebodyandpromoter.coords.flat,
+                            assay_name = "GA")
 
-seqlevelsStyle(gene.coords) <- 'UCSC'
-genebody.coords <- keepStandardChromosomes(gene.coords, pruning.mode = 'coarse')
-
-# Flatten the overlapping genes and extend by 2kb upstream of promoters
-genebody.coords.flat <- GenomicRanges::reduce(x = genebody.coords)
-genebodyandpromoter.coords.flat <- Signac::Extend(genebody.coords.flat,upstream = 2000)
-
-# Retrieve gene names from the original annotation (lost because of flatenning)
-genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.coords.flat,genebody.coords)]$gene_name
 ```
-
-```{r}
-gene.activities <- FeatureMatrix(
-  fragments = fragment.path,
-  features = genebodyandpromoter.coords.flat,
-  cells = colnames(brain),
-  chunk = 20
-)
-gene.key                  <- genebodyandpromoter.coords.flat$name
-names(gene.key)           <- GRangesToString(grange = genebodyandpromoter.coords.flat)
-rownames(gene.activities) <- gene.key[rownames(gene.activities)]
-gene.activities           <- gene.activities[rownames(gene.activities) != "",]
-
-brain[['GA']]             <- CreateAssayObject(counts = gene.activities)
-```
-
 
 ```{r}
 markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
 assay='GA'
 
 
-brain.markers.ls <- lapply(unique(markers$cluster),function(x){
-  marker.genes <- markers[markers$cluster==x & markers$p_val_adj < 0.05 & markers$avg_logFC > 0,"gene"]
-  marker.genes <- head(marker.genes,200)
-  marker.genes.agg.exp <- Matrix::colSums(brain[[assay]]@data[rownames(brain[[assay]]) %in% marker.genes,])
-  marker.genes.agg.exp <- marker.genes.agg.exp / Matrix::colSums(brain[[assay]]@counts)
-  return(marker.genes.agg.exp)
-})
 
-names(brain.markers.ls)  <- gsub("-",".",unique(markers$cluster))
-markers.agg.df           <- do.call(cbind,brain.markers.ls)
-colnames(markers.agg.df) <- paste0("marker_",gsub(" ",".",colnames(markers.agg.df)))
-
-
-brain <- AddMetaData(brain,metadata = markers.agg.df,col.name = colnames(markers.agg.df))
+meta.df <- metageneScoreFromMarkers(seurat_object = brain,
+                                    markers_df = markers,
+                                    assay = assay)
+brain <- AddMetaData(brain,metadata = meta.df,col.name = colnames(meta.df))
 
 
 
-lapply(as.character(colnames(markers.agg.df)),function(x){
-  FeaturePlot(brain,x,max.cutoff = quantile(markers.agg.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(markers.agg.df[,x],0.05,na.rm=TRUE)) + scale_color_viridis_c() + NoLegend()
-  #FeaturePlot(brain,x,max.cutoff = 0.08,min.cutoff = 0.02) + scale_color_viridis_c(limits=c(0.02,0.08)) 
+p.ls <- lapply(as.character(colnames(meta.df)),function(x){
+  FeaturePlot(brain,x,max.cutoff = quantile(meta.df[,x],0.9,na.rm=TRUE),min.cutoff = quantile(meta.df[,x],0.05,na.rm=TRUE)) +
+    scale_color_viridis() + NoLegend()
   })
 
 
@@ -119,8 +99,9 @@ lapply(as.character(colnames(markers.agg.df)),function(x){
 
 
 ```{r}
-brain <- RenameIdents(brain,'4' = "mOL",'8' = 'mOL','12' = 'OPC','5' = "Astrocytes",'10'='Astrocytes')
-DimPlot(brain,label=TRUE) + NoLegend()
+# Manual re-labeling
+# brain <- RenameIdents(brain,'4' = "mOL",'8' = 'mOL','12' = 'OPC','5' = "Astrocytes",'10'='Astrocytes')
+# DimPlot(brain,label=TRUE) + NoLegend()
 ```
 
 ```{r,fig.width=10,fig.height=10}
@@ -166,46 +147,23 @@ plot2 <- DimPlot(
 
 plot1 + plot2
 ```
+
 ```{r}
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
-
-exportBW <- function(object,cluster,fragments){
-  if(class(object) == "Seurat"){
-    cells <- rownames(object@meta.data[object@active.ident == cluster,])
-  }
-  if(length(cells)==0){return(paste0("No cells found for cluster ",cluster))}
-  
-  new_read <- GRanges(seqnames = chrom.sizes[,1], 
-          ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
-                          width=1),
-          name = "in_silico_extra_read",
-          score = 0
-          )
-  
-  fragments.x <- fragments$name %in% cells
-  fragments.x <- fragments[fragments.x]
-  fragments.x <- c(fragments.x,new_read)
-  
-  
-  coverage.x <- coverage(fragments.x)
-  
-  # Option A - normalize by number of reads per sample
-  coverage.x <- coverage.x/(length(fragments.x)/1e6)
-  
-  # Option B - normalize by mean signal (~ enrichment of mean signal)
-  # coverage.x <- coverage.x / mean(unlist(coverage.x))
-  
-  rtracklayer::export.bw(object = coverage.x,paste0(params$out_prefix,params$antibody,"/clustering/bigwig/cluster_",cluster,".bw"))
-}
-
 fragments <- rtracklayer::import(fragment.path,format = 'bed')
 
 brain@active.ident <- as.factor(brain$predicted.id)
-exportBW(brain,'Oligodendrocytes',fragments)
-exportBW(brain,'Astrocytes',fragments)
-exportBW(brain,'Oligodendrocyte_precursor_cells',fragments)
+
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig/"),recursive = TRUE)
+       
+to.export.bw <- list("Oligodendrocytes","Astrocytes","Oligodendrocyte_precursor_cells")
+    
+lapply(to.export.bw,function(x){
+  exportBW(brain,x,fragments, paste0(params$out_prefix,params$antibody,"/clustering/bigwig/cluster_",x,".bw"))
+})
+
 ```
 
 ```{r}
