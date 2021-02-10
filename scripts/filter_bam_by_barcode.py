@@ -47,7 +47,7 @@ with ExitStack() as stack:
     n = 0
     for line in bamfile:
       n+=1
-      if n % 1000000 == 0:
+      if n % 5000000 == 0:
         sys.stderr.write("*** {} lines processed ***\n".format(n))
       try:
         barcode = line.get_tag("CB")

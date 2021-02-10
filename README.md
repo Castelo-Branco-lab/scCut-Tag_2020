@@ -70,7 +70,7 @@ IGV -> View -> Preferences -> Advanced -> Data registry url
 
 Change the URL to:
 
-    https://storage.googleapis.com/sc_cutandtag/IGV_config/IGV_registry.txt
+    https://raw.githubusercontent.com/mardzix/IGV_track_server/master/registry/IGV_registry.txt
 
 ![IGV setup](figs/IGV.png)
 
