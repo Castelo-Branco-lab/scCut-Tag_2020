@@ -69,7 +69,7 @@ createFeatureAssay <- function(seurat_object,features, assay_name) {
 
 # Calculate metagene score for a vector of genes
 metageneScore <- function(seurat_object, genes,assay = "GA") {
-  metagene.score <- Matrix::colSums(seurat_object[[assay]]@data[rownames(seurat_object[[assay]]) %in% genes,])
+  metagene.score <- Matrix::colSums(seurat_object[[assay]]@counts[rownames(seurat_object[[assay]]) %in% genes,])
   metagene.score <- metagene.score / Matrix::colSums(seurat_object[[assay]]@counts)
   return(metagene.score)
 }
@@ -80,7 +80,7 @@ metageneScoreFromMarkers <- function(seurat_object, markers_df ,assay = "GA") {
   meta.ls <- lapply(unique(markers_df$cluster),function(x) {
     marker.genes <- markers_df[markers_df$cluster==x & markers_df$p_val_adj < 0.05 & markers_df$avg_logFC > 0,"gene"]
     marker.genes <- head(marker.genes,200)
-    metascore    <- metageneScore(seurat_object = brain,genes = marker.genes,assay = "GA")
+    metascore    <- metageneScore(seurat_object = seurat_object,genes = marker.genes,assay = assay)
     return(metascore)
   })
 

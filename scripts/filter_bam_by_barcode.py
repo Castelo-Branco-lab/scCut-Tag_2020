@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys
+import sys,os
 import pysam
 from contextlib import ExitStack
 
@@ -25,7 +25,7 @@ for line in open(barcode_annotations,'r'):
 
 # Iterate over clusters and generate list of paths for output files
 clusters = list(set(clusters_dic.values()))
-clusters_outfiles = {x: out_prefix + x + "_out.bam" for x in clusters}
+clusters_outfiles = {x: out_prefix + "/" + x + "_out.bam" for x in clusters}
 
 sys.stderr.write("*** Found following clusters in cluster - barcode file ***\n")
 sys.stderr.write("\n".join(clusters) + "\n\n")
@@ -47,7 +47,7 @@ with ExitStack() as stack:
     n = 0
     for line in bamfile:
       n+=1
-      if n % 1000000 == 0:
+      if n % 5000000 == 0:
         sys.stderr.write("*** {} lines processed ***\n".format(n))
       try:
         barcode = line.get_tag("CB")

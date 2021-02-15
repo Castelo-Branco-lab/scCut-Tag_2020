@@ -60,5 +60,5 @@ rule export_bam_per_cluster:
     filter_bam          =   os.path.dirname(workflow.basedir) + "/scripts/filter_bam_by_barcode.py",
     sample              =   "scATAC_P50"
   shell:
-    "python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.bam_files}; "
+    "mkdir {output.bam_files}; python3 {params.filter_bam} {input.bam} {input.table} {params.sample} {output.bam_files}; "
 
