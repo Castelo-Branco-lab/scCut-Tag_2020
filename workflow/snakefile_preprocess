@@ -1,10 +1,12 @@
-include: 'preflight'
+configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
 
+include: 'preflight'
 
 rule all_preprocess:
   input:
-    #expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
-    expand("results/{sample}/cell_picking/metadata.csv",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
+    #expand("results/{sample}/cell_picking/metadata.csv",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
+    expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds", sample = samples_dict.keys(),binwidth = config['general']['clustering_window']),
+    
 rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'

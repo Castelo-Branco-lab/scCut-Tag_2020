@@ -10,6 +10,7 @@ samples:
     Age: P25
     Antibody: H3K4me3
     window: 5000
+    Version: mm10
   H3K4me3_N2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_009
     clustering_params: 
@@ -21,6 +22,7 @@ samples:
     Age: P25
     Antibody: H3K4me3
     window: 5000
+    Version: mm10
   H3K4me3_N3: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB01b/CT_20_MB01
     clustering_params: 
@@ -32,6 +34,7 @@ samples:
     Age: P15
     Antibody: H3K4me3
     window: 5000
+    Version: mm10
   H3K4me3_N4: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB02b
     clustering_params: 
@@ -43,6 +46,7 @@ samples:
     Age: P15
     Antibody: H3K4me3
     window: 5000
+    Version: mm10
   
   H3K27me3_N1: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_19_003
@@ -55,6 +59,7 @@ samples:
     Age: P25
     Antibody: H3K27me3
     window: 5000
+    Version: mm10
   H3K27me3_N2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_006
     clustering_params: 
@@ -66,6 +71,7 @@ samples:
     Age: P25
     Antibody: H3K27me3
     window: 5000
+    Version: mm10
   H3K27me3_N3: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB03
     clustering_params: 
@@ -77,6 +83,7 @@ samples:
     Age: P15
     Antibody: H3K27me3
     window: 5000
+    Version: mm10
   H3K27me3_N4: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB04
     clustering_params: 
@@ -88,6 +95,7 @@ samples:
     Age: P15
     Antibody: H3K27me3
     window: 5000
+    Version: mm10
   
   H3K27me3_cell_lines_1: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB006
@@ -100,6 +108,7 @@ samples:
     Age: P15
     Antibody: H3K27me3_cell_lines
     window: 5000
+    Version: mm10
   H3K27me3_cell_lines_2: 
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_MB007
     clustering_params: 
@@ -111,6 +120,7 @@ samples:
     Age: P15
     Antibody: H3K27me3_cell_lines
     window: 5000
+    Version: mm10
 
   H3K27ac_N1:
     cellranger_out: /data/proj/GCB_MB/CT/CT_19_001
@@ -134,6 +144,7 @@ samples:
     Age: P25
     Antibody: H3K27ac
     window: 5000
+    Version: mm10
 
   H3K36me3_N1:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_001
@@ -146,6 +157,7 @@ samples:
     Age: P25
     Antibody: H3K36me3
     window: 50000
+    Version: mm10
   H3K36me3_N2:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_008
     clustering_params:
@@ -157,6 +169,7 @@ samples:
     Age: P25
     Antibody: H3K36me3
     window: 50000
+    Version: mm10
 
   Olig2_N1:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_003
@@ -169,6 +182,7 @@ samples:
     Age: P25
     Antibody: Olig2
     window: 5000
+    Version: mm10
   Olig2_N2:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_010
     clustering_params:
@@ -180,6 +194,7 @@ samples:
     Age: P25
     Antibody: Olig2
     window: 5000
+    Version: mm10
 
   Rad21_N1:
     cellranger_out: /data/proj/GCB_MB/CT/CT_20_007
@@ -192,11 +207,13 @@ samples:
     Age: P25
     Antibody: Rad21
     window: 5000
+    Version: mm10
 
 general:
   clustering_window: [1000,10000,5000,25000,50000,100000]
   conda_env: CT_snakemake
   tmpdir: /data/proj/GCB_MB/tmp
+  Version: mm10
 
 RNA_seq:
   Sox10_RNA:

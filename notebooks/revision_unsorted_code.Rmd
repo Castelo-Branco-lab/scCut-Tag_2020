@@ -5,7 +5,8 @@ output:
     df_print: paged
 params:
   config: '../config/config.yaml'
-  out_prefix: "/Users/mareba/mount/CT/git_test/results/" #'results/'
+  #out_prefix: "/Users/mareba/mount/CT/git_test/results/" #'results/'
+  out_prefix: "/data/proj/GCB_MB/CT/git_test/results/" #'results/'
 ---
 
 # UMAP

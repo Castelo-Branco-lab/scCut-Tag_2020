@@ -1,11 +1,20 @@
 #### Read annotation
 
-load_ensembl_annot <- function() {
-  library(EnsDb.Mmusculus.v79)
+load_ensembl_annot <- function(version = 'mm10') {
   library(ensembldb)
   
-  cat("*** Loading mm10 annotation \n")
-  ensdb = EnsDb.Mmusculus.v79
+  if (version == 'mm10'){
+    cat("*** Loading mm10 annotation \n")
+    library(EnsDb.Mmusculus.v79)
+    ensdb = EnsDb.Mmusculus.v79
+  }
+  
+  if (version == 'hg38'){
+    cat("*** Loading hg38 annotation \n")
+    library(EnsDb.Hsapiens.v86)
+    ensdb = EnsDb.Hsapiens.v86
+  }
+  
 
   gene.coords <- ensembldb::genes(ensdb, filter = ~ gene_biotype == "protein_coding")
   lncRNA.coords <- ensembldb::genes(ensdb, filter = ~ gene_biotype == "lincRNA")
@@ -95,7 +104,7 @@ metageneScoreFromMarkers <- function(seurat_object, markers_df ,assay = "GA") {
 
 # Export bigwig 
 
-exportBW <- function(object,cluster,fragments,path){
+exportBW <- function(object,cluster,fragments,path,chrom.sizes){
   library(GenomicRanges)
   if(class(object) == "Seurat"){
     cells <- rownames(object@meta.data[object@active.ident == cluster,])
@@ -121,5 +130,8 @@ exportBW <- function(object,cluster,fragments,path){
   
   rtracklayer::export.bw(object = coverage.x,con = path)
 }
+
+
+
 
 

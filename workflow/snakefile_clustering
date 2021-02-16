@@ -1,0 +1,34 @@
+
+configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
+include: 'preflight'
+
+# Merge and run clustering together
+expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
+
+
+########### FINAL TWEAKED CLUSTERING
+rule clustering_final:
+  input:
+    lambda wildcards: expand("results/{sample}/cell_picking/5000/Seurat_object.Rds", sample = [x for x in samples_dict if samples_dict[x] == wildcards.antibody]),
+    notebook       = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/{antibody}_clustering_merge.Rmd",
+    RNAmarkers     = 'results/Sten_RNA/clustering/sten_RNA_markers.csv',
+    GFPmarkers     ='results/Sox10_RNA/clustering/GFP/markers.csv',
+    # peaks_narrow   = 'results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak', # TODO: Fix atac conflict
+    # peaks_broad    = 'results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak' # TODO: Fix atac conflict
+    # TODO: Olig2 depends on H3K27ac, write lambda function for that 
+  output:
+    seurat  = "results/{antibody}/clustering/01.clustering.Rds",
+    report  = "results/{antibody}/clustering/01.clustering.html",
+    markers = "results/{antibody}/clustering/markers.csv",
+    bigwig  = directory("results/{antibody}/clustering/bigwig/"),
+    bed     = directory("results/{antibody}/clustering/markers_bed/"),
+    table   = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv",
+    
+  params:
+    config         = config_file,
+    out_prefix     = CWD + '/results/',
+    report         = CWD + '/results/{antibody}/clustering/01.clustering.html',
+  shell:
+    " Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
+
+# 

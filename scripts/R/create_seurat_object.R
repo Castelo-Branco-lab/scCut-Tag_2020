@@ -1,11 +1,16 @@
 library(argparse)
 library(Seurat)
 library(Signac)
-#library(EnsDb.Mmusculus.v79);
-#library(viridis);
-#library(ggplot2);
-#library(dplyr);
-#library(BSgenome.Mmusculus.UCSC.mm10)
+library(GenomicFeatures)
+library(yaml)
+library(rtracklayer)
+library(viridis);
+library(ggplot2);
+library(funr)
+
+
+source(paste0(dirname(funr::sys.script()),"/func.R"))
+ndim = 40
 
 ###############################
 parser <- ArgumentParser()
@@ -22,16 +27,36 @@ parser$add_argument("-c", "--config", type="character", default='config/config.y
 parser$add_argument("-o", "--out_prefix", type="character", default="10000", 
                     help="folder for the output in clustering_snakemake folder")
 
-parser$add_argument("-w", "--window", type="numeric", default="10000", 
+parser$add_argument("-w", "--window", type="integer", default="10000", 
                     help="width of a window")
 
 args <- parser$parse_args()
 
+####### Load the config
+config    <- yaml::yaml.load_file(input = args$config)
+
+# Get genome version
+genome_version <- config$samples[[args$sample]]$Version
+if (is.null(genome_version)){
+  genome_version <- config$general$Version
+}
+
+if (is.null(genome_version)) {
+  cat("*** Error: genome version needs to be specified in config.yaml either sample specific or in general ***")
+}
+
 ############################ Filter the dataset
 
-metadata <- read.csv(file = paste0(args$out_prefix,'metadata.csv'))
+metadata <- read.csv(file = args$metadata,stringsAsFactors = FALSE)
 metadata <- metadata[metadata$passedMB,]
 rownames(metadata) <- metadata$barcode
+
+######## Fragments
+fragments.path <- paste0(config$samples[[args$sample]]$cellranger_out,'/outs/fragments.tsv.gz')
+fragments      <- CreateFragmentObject(path = fragments.path,
+                                       cells = metadata$barcode,
+                                       verbose = TRUE,validate.fragments = TRUE)
+
 
 ############################ Create peak counts matrix
 cat("*** Creating bins/peaks matrices \n")
@@ -40,15 +65,15 @@ peaks_file = paste0('results/',args$sample,'/macs/broad/',args$sample,'_peaks.br
 if (!file.exists(peaks_file)) {stop(paste0("Peaks file does not exist:: ", peaks_file))}
 peaks <- rtracklayer::import(peaks_file)
 
+
 counts.matrix.peaks <- FeatureMatrix(fragments = fragments,
                                      features = peaks,
-                                     cells = metadata$barcode,
-                                     chunk = 50)
+                                     cells = metadata$barcode)
 
 
 counts.matrix.bins <- GenomeBinMatrix(fragments = fragments,
-                                      genome = seqlengths(BSgenome.Mmusculus.UCSC.mm10),
-                                      binsize = window,
+                                      genome = setNames(getChromInfoFromUCSC(genome_version)[,2],getChromInfoFromUCSC(genome_version)[,1]),
+                                      binsize = args$window,
                                       cells = metadata$barcode)
 
 ########################## Create Seurat object
@@ -70,41 +95,44 @@ seurat_object$blacklist_ratio <- seurat_object$blacklist_region_fragments / seur
 seurat_object                 <- seurat_object[,seurat_object$blacklist_region_fragments < 5]
 
 # Add sample id to cell names
-seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
+# seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
 
-seurat_object$antibody   <- config$sample[[args$sample]]$Antibody
-seurat_object$GFP        <- config$sample[[args$sample]]$GFP
-seurat_object$Age        <- config$sample[[args$sample]]$Age
-
+new.metadata <- unlist(config$samples[[args$sample]])
+for (x in seq(new.metadata)) {
+  seurat_object <- AddMetaData(object = seurat_object,metadata = new.metadata[x],col.name = names(new.metadata)[x])
+}
 
 ########## Create Gene activity matrix
-cat("*** Create gene matrix for mm10 \n")
+genebodyandpromoter.coords.flat <- load_ensembl_annot(genome_version)
+
 gene.matrix     <- FeatureMatrix(fragments = fragments,
-                                 features = genebodyandpromoter.coords.flat,
-                                 cells = gsub(paste0(args$sample,"_"),"",colnames(seurat_object)))
+                                 features = genebodyandpromoter.coords.flat ,
+                                 cells = colnames(seurat_object))
 
 genes.key             <- genebodyandpromoter.coords.flat$name
 names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
 rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
 
 gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
-colnames(gene.matrix) <- paste0(args$sample,"_",colnames(gene.matrix))
+
 
 seurat_object[['GA']] <- CreateAssayObject(counts = gene.matrix)
 
 ######### Save the object
 cat("*** Save the object \n")
+dir.create(args$out_prefix,recursive = TRUE)
 saveRDS(object = seurat_object,file = paste0(args$out_prefix,'Seurat_object.Rds'))
 
-########################## Try Lustering using Seurat
+########################## Try Clustering using Seurat
 cat("*** Clustering and dimensionality reduction \n")
 
 DefaultAssay(seurat_object) <- paste0('bins_',args$window)
+# DefaultAssay(seurat_object) <- "peaks"
 
 # The dimensionality reduction might fail, especially for low complexity datasets, so put the code into try to still save the objects
 try({
 seurat_object <- RunTFIDF(seurat_object)
-seurat_object <- FindTopFeatures(seurat_object,min.cutoff = 'q20')
+seurat_object <- FindTopFeatures(seurat_object,min.cutoff = 'q0')
 seurat_object <- RunSVD(
   seurat_object,
   reduction.key = 'LSI_',
@@ -123,7 +151,7 @@ seurat_object <- FindNeighbors(
 
 seurat_object <- FindClusters(
   object = seurat_object,
-  algorithm = "leiden",
+  #algorithm = "leiden",
   resolution = 0.3,
   verbose = TRUE
 )
