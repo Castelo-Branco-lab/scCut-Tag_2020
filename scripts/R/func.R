@@ -4,15 +4,16 @@ load_ensembl_annot <- function(version = 'mm10') {
   library(ensembldb)
   
   if (version == 'mm10'){
-    cat("*** Loading mm10 annotation \n")
+    cat("*** Loading mm10 annotation of genes \n")
     library(EnsDb.Mmusculus.v79)
     ensdb = EnsDb.Mmusculus.v79
-  }
-  
-  if (version == 'hg38'){
-    cat("*** Loading hg38 annotation \n")
+  } else if (version == 'hg38'){
+    cat("*** Loading hg38 annotation of genes \n")
     library(EnsDb.Hsapiens.v86)
     ensdb = EnsDb.Hsapiens.v86
+  } else {
+    cat("*** ERROR: Only mm10 and hg38 supported\n")
+    return(NULL)
   }
   
 
@@ -30,6 +31,29 @@ load_ensembl_annot <- function(version = 'mm10') {
   # Retrieve gene names from the original annotation (lost because of flatenning)
   genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.coords.flat,genebody.coords)]$gene_name
   return(genebodyandpromoter.coords.flat)
+}
+
+load_ensembl_promoters <- function(version = 'mm10'){
+  if (version == 'mm10'){
+    cat("*** Loading mm10 annotation of promoters \n")
+    library(EnsDb.Mmusculus.v79)
+    ensdb = EnsDb.Mmusculus.v79
+  } else if (version == 'hg38'){
+    cat("*** Loading hg38 annotation of promoters \n")
+    library(EnsDb.Hsapiens.v86)
+    ensdb = EnsDb.Hsapiens.v86
+  } else {
+    cat("*** ERROR: Only mm10 and hg38 supported\n")
+    return(NULL)
+  }
+  
+  promoter.coords <- promoters(ensdb)
+  
+  
+  promoter.coords <- promoter.coords[promoter.coords$tx_biotype == "protein_coding" | promoter.coords$tx_biotype== "lincRNA"]
+  seqlevelsStyle(promoter.coords) <- 'UCSC'
+  
+  return(promoter.coords)
 }
 
 
@@ -131,6 +155,32 @@ exportBW <- function(object,cluster,fragments,path,chrom.sizes){
   rtracklayer::export.bw(object = coverage.x,con = path)
 }
 
+DoHeatmapMB <- function(object, markers,fraction = 0.2,slot = "data",assay, clusterColors){
+  
+  object <- object[,sample(colnames(object),length(colnames(object)) * fraction)]
+  
+  row_annotation.df           <- data.frame(markers=markers$cluster)
+  rownames(row_annotation.df) <- markers$gene
+  col_annotation.df           <- data.frame(clusters=Idents(object))
+  col_annotation.df$sample    <- object$sample
+  col_annotation.df           <- col_annotation.df[order(col_annotation.df$clusters,col_annotation.df$sample),]
+  
+  heatmap.mat <- GetAssayData(object = object, slot,assay = assay)
+  heatmap.mat <- heatmap.mat[rownames(row_annotation.df),rownames(col_annotation.df)]
+  
+  print(dim(heatmap.mat))
+  
+  pheatmap::pheatmap(heatmap.mat,
+                     cluster_cols = FALSE, 
+                     cluster_rows = FALSE,
+                     annotation_row = row_annotation.df,
+                     annotation_col = col_annotation.df,
+                     color = viridis::viridis(256),
+                     show_rownames = FALSE,
+                     show_colnames = FALSE,
+                     labels_col = "",labels_row = "",
+                     annotation_colors = clusterColors)
+}
 
 
 

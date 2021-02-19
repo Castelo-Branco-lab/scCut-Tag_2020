@@ -6,6 +6,7 @@ rule all_preprocess:
   input:
     #expand("results/{sample}/cell_picking/metadata.csv",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
     expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds", sample = samples_dict.keys(),binwidth = config['general']['clustering_window']),
+    expand("results/{antibody}/fragments.tsv.gz",antibody = antibody_dict.keys()),
     
 rule bam_to_bw:
     input:
@@ -116,9 +117,9 @@ rule merge_bam:
 
 rule merge_fragments:
     input:
-        lambda wildcards: ['results/' + x + '/outs/fragments.tsv.gz' for x in antibody_dict[wildcards.antibody] ]
+        lambda wildcards: ["results/" + x + "/outs/fragments.tsv.gz" for x in antibody_dict[wildcards.antibody] ]
     output:
-        "results/merged/{antibody}/fragments.tsv.gz"
+        "results/{antibody}/fragments.tsv.gz"
     shell:
         "gunzip -c {input} | sort -k1,1 -k2,2n | bgzip  > {output} && "
         "tabix -p bed {output}" 

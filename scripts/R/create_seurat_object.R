@@ -51,30 +51,62 @@ metadata <- read.csv(file = args$metadata,stringsAsFactors = FALSE)
 metadata <- metadata[metadata$passedMB,]
 rownames(metadata) <- metadata$barcode
 
-######## Fragments
+######## Create  fragments object
 fragments.path <- paste0(config$samples[[args$sample]]$cellranger_out,'/outs/fragments.tsv.gz')
 fragments      <- CreateFragmentObject(path = fragments.path,
                                        cells = metadata$barcode,
                                        verbose = TRUE,validate.fragments = TRUE)
+####################
+# Load annotations #
+####################
 
-
-############################ Create peak counts matrix
-cat("*** Creating bins/peaks matrices \n")
-
+# Peaks
 peaks_file = paste0('results/',args$sample,'/macs/broad/',args$sample,'_peaks.broadPeak')
 if (!file.exists(peaks_file)) {stop(paste0("Peaks file does not exist:: ", peaks_file))}
 peaks <- rtracklayer::import(peaks_file)
 
+# Genes
+genebodyandpromoter.coords.flat <- load_ensembl_annot(genome_version)
+genes.key             <- genebodyandpromoter.coords.flat$name
+names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
 
+# Promoters
+promoter.coords <- load_ensembl_promoters(config$general$Version)
+
+promoters.key <- promoter.coords$tx_name
+names(promoters.key) <- GRangesToString(promoter.coords)
+
+###################
+# Create matrices #
+###################
+
+cat("*** Creating peaks matrix \n")
 counts.matrix.peaks <- FeatureMatrix(fragments = fragments,
                                      features = peaks,
                                      cells = metadata$barcode)
 
 
+cat("*** Creating genomic bin matrix \n")
 counts.matrix.bins <- GenomeBinMatrix(fragments = fragments,
                                       genome = setNames(getChromInfoFromUCSC(genome_version)[,2],getChromInfoFromUCSC(genome_version)[,1]),
                                       binsize = args$window,
                                       cells = metadata$barcode)
+
+cat("*** Creating gene activities matrix \n")
+gene.matrix     <- FeatureMatrix(fragments = fragments,
+                                 features = genebodyandpromoter.coords.flat ,
+                                 cells = metadata$barcode)
+
+rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
+gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
+
+cat("*** Creating promoter activities matrix \n")
+promoter.matrix <- FeatureMatrix(fragments = fragments,
+                                 features = promoter.coords,
+                                 cells = metadata$barcode)
+
+rownames(promoter.matrix) <- promoters.key[rownames(promoter.matrix)]
+promoter.matrix <- promoter.matrix[rownames(promoter.matrix) != "",]
 
 ########################## Create Seurat object
 min_features = 1
@@ -89,34 +121,17 @@ seurat_object <- CreateSeuratObject(counts = counts.matrix.bins,
 
 
 seurat_object[['peaks']] <- CreateAssayObject(counts = counts.matrix.peaks[,colnames(counts.matrix.peaks) %in% colnames(seurat_object)])
+seurat_object[['GA']]    <- CreateAssayObject(counts = gene.matrix[,colnames(gene.matrix) %in% colnames(seurat_object)])
+seurat_object[['PA']]    <- CreateAssayObject(counts = promoter.matrix[,colnames(promoter.matrix) %in% colnames(seurat_object)])
 
 # Filter blacklist cells
 seurat_object$blacklist_ratio <- seurat_object$blacklist_region_fragments / seurat_object$all_unique_MB
 seurat_object                 <- seurat_object[,seurat_object$blacklist_region_fragments < 5]
 
-# Add sample id to cell names
-# seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
-
 new.metadata <- unlist(config$samples[[args$sample]])
 for (x in seq(new.metadata)) {
   seurat_object <- AddMetaData(object = seurat_object,metadata = new.metadata[x],col.name = names(new.metadata)[x])
 }
-
-########## Create Gene activity matrix
-genebodyandpromoter.coords.flat <- load_ensembl_annot(genome_version)
-
-gene.matrix     <- FeatureMatrix(fragments = fragments,
-                                 features = genebodyandpromoter.coords.flat ,
-                                 cells = colnames(seurat_object))
-
-genes.key             <- genebodyandpromoter.coords.flat$name
-names(genes.key)      <- GRangesToString(genebodyandpromoter.coords.flat)
-rownames(gene.matrix) <- genes.key[rownames(gene.matrix)]
-
-gene.matrix           <- gene.matrix[rownames(gene.matrix) != "",]
-
-
-seurat_object[['GA']] <- CreateAssayObject(counts = gene.matrix)
 
 ######### Save the object
 cat("*** Save the object \n")
@@ -167,6 +182,9 @@ ggsave(plot= p1 + p2 + p3,
        filename = paste0(args$out_prefix,'Seurat_clustering.png'),
        width=15,height=5)
 })
+
+# Add sample id to cell names
+seurat_object            <- RenameCells(object = seurat_object,add.cell.id = args$sample)
 
 ######### Save the final object
 cat("*** Save the object \n")
