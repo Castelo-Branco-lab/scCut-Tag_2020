@@ -218,7 +218,7 @@ dir.create(paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/"),
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC) %>% drop_na
+top.markers <- markers %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC) %>% drop_na()
 
 
 top.markers         <- as.data.frame(top.markers)
@@ -242,7 +242,7 @@ samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
 samples <- samples[samples == params$antibody]
 
 
-fragments.path     <- paste0(params$out_prefix,'/H3K4me3/fragments.tsv.gz')
+fragments.path     <- paste0(params$out_prefix,params$antibody,'/fragments.tsv.gz')
 fragments.grange   <- rtracklayer::import(con = fragments.path,format = 'bed')
 
 chrom.sizes <- getChromInfoFromUCSC(genome = config$general$Version)

@@ -58,7 +58,8 @@ saveRDS(object = conns,file = paste0(params$out_prefix,'/H3K27ac/cicero/connecti
 
 COACCESS_CUTOFF = 0.2
 conns.pairs <- Pairs(first  = StringToGRanges(conns$Peak1)[which(conns$coaccess > COACCESS_CUTOFF)],
-                     second = StringToGRanges(conns$Peak2)[which(conns$coaccess > COACCESS_CUTOFF)])
+                     second = StringToGRanges(conns$Peak2)[which(conns$coaccess > COACCESS_CUTOFF)],
+                     elementMetadata = conns$coaccess[which(conns$coaccess > COACCESS_CUTOFF)])
 
 #rtracklayer::export(object = conns.pairs,format = 'bedpe',con = '~/temp.bedpe')
 
@@ -76,7 +77,7 @@ specific.loops <- lapply(peaks.ls,function(x){
   conns.pairs[both.sides]
   })
 
-dir.create(paste0(params$out_prefix,'/H3K27ac/cicero/'))
+dir.create(paste0(params$out_prefix,'/H3K27ac/cicero/'),recursive=TRUE)
 lapply(seq(specific.loops),function(x){
   rtracklayer::export(object = specific.loops[[x]], con = paste0(params$out_prefix,'/H3K27ac/cicero/loops/cluster_',unique(brain@active.ident)[x],".bedpe"))
 })
