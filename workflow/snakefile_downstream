@@ -1,3 +1,19 @@
+include: 'preflight'
+
+rule downstream_all:
+  input:
+    "results/H3K27ac/cicero/cicero_image.Rdata",
+    "results/H3K4me3/spreading/breadth.Rdata",
+    "results/H3K4me3/spreading/spreading.Rdata",
+    "results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds",
+    "results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds",
+    "results/H3K4me3/GO_terms/GO_matrix_markers.csv",
+    expand("results/{antibody}/integration/integrated.Rds",antibody=['Olig2','Rad21']),
+    
+    
+    
+    
+    
 
 #######################################
 rule download_blacklist:
@@ -7,98 +23,6 @@ rule download_blacklist:
     out_dir = 'results/'
   shell:
     "wget -P {params.out_dir} http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/mm10-mouse/mm10.blacklist.bed.gz"
-
-# Fingerprint analysis
-# Merge per cluster
-rule merge_bam_per_cluster:
-  input:
-    "results/{antibody}/clustering/bam_per_cluster/"
-  output:
-    directory('results/merged/{antibody}/bam_per_cluster/')
-  params:
-    bam_per_cluster_dir =  "results/{antibody}/clustering/bam_per_cluster/"
-  threads:16
-  shell:
-    """
-    clusters=$(ls {params.bam_per_cluster_dir}/*/*.bam | while read line; do basename $line| sed 's/_out.bam//g'; done | sort | uniq); 
-    for cluster in $clusters; do  
-      infiles=$(find {params.bam_per_cluster_dir} -name $cluster"*.bam") ; 
-      samtools merge -@ {threads} "{output}"$cluster"_merged.bam" $infiles; 
-      samtools index {output}
-    done
-    """
-
-rule plot_heatmap_scCT:
-  input:
-    merged_bam        = "results/merged/{antibody}/possorted_bam.bam",
-    per_replicate_bam = expand("{cellranger}/outs/possorted_bam.bam",cellranger = [config['samples'][x]['cellranger_out'] for x in config['samples'] if config['samples'][x]['Antibody'] == "H3K27me3"]),
-    per_cluster_bam   = 'results/merged/{antibody}/bam_per_cluster/',
-  output:
-    "results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt"
-  threads: 16
-  params:
-    per_cluster_bam = 'results/merged/H3K27me3/bam_per_cluster/*.bam'
-  shell:
-    """
-      plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {params.per_cluster_bam} -p 16
-    """
-
-# FrIP analysis
-
-rule call_peaks_scCT_FrIP:
-  input:
-    #bam="results/{sample}/outs/fragments.tsv.gz" # Cellranger fragments.tsv output
-    bam = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
-  output:
-    directory("results/other_datasets/frip_analysis/scCT/{sample}/macs/")
-  params:
-    outdir = directory("results/other_datasets/frip_analysis/scCT/{sample}/macs/"),
-    name   = "{sample}"
-  shell:
-    "macs2 callpeak -t {input.bam} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.name} --max-gap 2500 --nolambda --slocal 1000000 --llocal 1000000"
-
-rule intersect_fragments_with_peaks:
-  input:
-    peaks = "results/other_datasets/frip_analysis/scCT/{sample}/macs/",
-    fragments = "results/{sample}/outs/fragments.tsv.gz",
-  output:
-    all_fragments  = "results/other_datasets/frip_analysis/scCT/{sample}/all_fragments.txt",
-    peak_fragments = "results/other_datasets/frip_analysis/scCT/{sample}/peak_fragments.txt",
-  params:
-      sample = "{sample}"
-  shell:
-    """
-    zcat {input.fragments} | cut -f4 | sort | uniq -c > {output.all_fragments} 
-    bedtools intersect -a {input.fragments} -b {input.peaks}{params.sample}_peaks.narrowPeak -wa | cut -f4 | sort | uniq -c > {output.peak_fragments}
-    """
-
-rule PCA:
-  input:
-    scCT_bigwig        = "results/H3K27me3/clustering/bigwig/",
-    markers_brain      = 'results/H3K27me3/clustering/markers_bed/',
-    markers_cell_lines = 'results/H3K27me3_cell_lines/clustering/markers_bed/',
-    cell_lines         = "results/H3K27me3_cell_lines/clustering/bigwig/",
-    bonev_CN           = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
-    matsuda_MGL        = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
-    OPCs_GCB           = config['CR_GCB']['OPC']['bigwig'],     # Deposit to GEO and fix link
-    Oli_neu_GCB        = config['CR_GCB']['Oli-neu']['bigwig'],   # Deposit to GEO and fix link
-    mESC_bigwig_1      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep1.bw',
-    mESC_bigwig_2      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep2.bw',
-    cells_3T3_rep1     = 'results/other_datasets/3T3_cells/bigwig/SRR9889940.bw',
-    cells_3T3_rep2     = 'results/other_datasets/3T3_cells/bigwig/SRR9889941.bw',
-  output:
-#    markers='results/other_datasets/PCA/markers_all.bed',
-    table_cell_lines   = 'results/other_datasets/PCA/PCA_table_cell_lines.npz',
-    table_brain        = 'results/other_datasets/PCA/PCA_table_brain.npz',
-    markers_cell_lines = 'results/other_datasets/PCA/markers_cell_lines.bed',
-    markers_brain      = 'results/other_datasets/PCA/markers_brain.bed',
-  shell:
-    """
-    ls {input.markers_cell_lines}*.bed | while read line; do head -100 $line >> {output.markers_cell_lines}; done 
-    ls {input.markers_brain}*.bed | while read line; do head -100 $line >> {output.markers_brain}; done 
-    multiBigwigSummary BED-file -b {input.cell_lines}*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
-    multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
-    """
 
 rule bed_per_cluster_and_replicate:
   input:
@@ -492,7 +416,7 @@ rule breadth_H3K4me3:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""    
 
 
-# Olig2 chromvar
+# Olig2 chromvar - not used in the end 
 rule chromvar:
   input:
     'results/{antibody}/clustering/01.clustering.Rds',

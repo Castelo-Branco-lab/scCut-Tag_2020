@@ -12,6 +12,8 @@ dependencies:
   - deeptools=3.4.3
   - python=3.6
   - bedtools=2.29.2
+  - trim-galore=0.6.6
+  - bowtie2=2.4.2
   - hdf5>1.8.13
   - htcondor
   - yaml
