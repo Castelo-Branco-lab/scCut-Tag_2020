@@ -5,7 +5,7 @@ output:
     df_print: paged
 params:
   config: '../../config/config.yaml'
-  out_prefix: "~/mount/CT/git_test/results/" #'results/'
+  out_prefix: "~/mount/CT/git_test/rework/results/" #'results/'
   antibody: 'Rad21'
   window: 25000
 ---
@@ -27,28 +27,27 @@ getwd()
 set.seed(100)
 ```
 
+
 # Read config
 
 ```{r read_config}
+source("../../scripts/R/func.R")
 config <- yaml::read_yaml(params$config)
+
+assay <- paste0("bins_",params$window)
 ```
 
 # load annotations
 
 ```{r load_gene_annotations}
-gene.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "protein_coding")
-lncRNA.coords <- ensembldb::genes(EnsDb.Mmusculus.v79, filter = ~ gene_biotype == "lincRNA")
-gene.coords <- c(gene.coords,lncRNA.coords)
+genebodyandpromoter.coords.flat <- load_ensembl_annot(config$general$Version)
+```
 
-seqlevelsStyle(gene.coords) <- 'UCSC'
-genebody.coords <- keepStandardChromosomes(gene.coords, pruning.mode = 'coarse')
 
-# Flatten the overlapping genes and extend by 2kb upstream of promoters
-genebody.coords.flat <- GenomicRanges::reduce(x = genebody.coords)
-genebodyandpromoter.coords.flat <- Signac::Extend(genebody.coords.flat,upstream = 2000)
-
-# Retrieve gene names from the original annotation (lost because of flatenning)
-genebodyandpromoter.coords.flat$name<- gene.coords[nearest(genebodyandpromoter.coords.flat,genebody.coords)]$gene_name
+```{r create_out_directories}
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig_inspect/clusters_all/"),recursive = TRUE)
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/"),recursive = TRUE)
+dir.create(paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/'))
 ```
 
 ```{r load_and_merge}
@@ -59,7 +58,7 @@ assay = paste0('bins_',window)
 
 brain.ls <- lapply(samples,function(x){
   # Read the seurat object
-  brain                     <- readRDS(paste0(params$out_prefix,x,'/cell_picking/',window,'/Seurat_object.Rds'))
+  brain                     <- readRDS(paste0(params$out_prefix,x,'/seurat/bin_',params$window,'/Seurat_object.Rds'))
   DefaultAssay(brain)       <- assay
   brain
 })
@@ -76,25 +75,6 @@ bins.mat              <- brain.merged[[assay]]@counts[rownames(brain.merged) %in
 
 brain.merged[[assay]] <- CreateAssayObject(counts = bins.mat)
 ```
-
-# Add promoter activity assay
-
-```{r promoter_activity_assay}
-# Fetch promoter coordinates
-promoter.coords <- promoters(EnsDb.Mmusculus.v79)
-promoter.coords <- promoter.coords[promoter.coords$tx_biotype == "protein_coding" | promoter.coords$tx_biotype== "lincRNA"]
-seqlevelsStyle(promoter.coords) <- 'UCSC'
-
-fragments.path <- paste0(params$out_prefix,'merged/',params$antibody,'/fragments.tsv.gz')
-promoter.matrix <- FeatureMatrix(fragments = fragments.path,features = promoter.coords,cells = colnames(brain.merged))
-
-promoters.key <- promoter.coords$tx_name
-names(promoters.key) <- GRangesToString(promoter.coords)
-rownames(promoter.matrix) <- promoters.key[rownames(promoter.matrix)]
-promoter.matrix <- promoter.matrix[rownames(promoter.matrix) != "",]
-brain.merged[['PA']] <- CreateAssayObject(counts = promoter.matrix)
-```
-
 
 ```{r cluster_and_dimreduce}
 # Re-do the dimreduction
@@ -165,7 +145,6 @@ do.call(grid.arrange,p.ls)
 
 ```{r load_RNA_markers}
 markers.Sox10 <- read.csv2(file=paste0(params$out_prefix,'Sox10_RNA/clustering/GFP/markers.csv'),row.names = 1)
-#markers       <- read.csv2(file=paste0(params$out_prefix,'Sten_RNA/clustering/sten_RNA_markers.csv'),row.names = 1)
 ```
 
 
@@ -237,7 +216,7 @@ p3
 brain.merged<- NormalizeData(brain.merged,normalization.method = 'LogNormalize',scale.factor=10000)
 markers <- FindAllMarkers(brain.merged,min.pct = 0.04,logfc.threshold = 0.1,slot = 'data')
 
-markers$closest_gene <- ClosestFeature(StringToGRanges(markers$gene ), genebodyandpromoter.coords.flat)$name
+markers$closest_gene <- ClosestFeature(regions = StringToGRanges(markers$gene ), annotation = genebodyandpromoter.coords.flat)$name
 #View(markers)
 
 markers.top <- markers %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
@@ -251,60 +230,30 @@ write.csv2(  x = markers.negative,  file = paste0(params$out_prefix,params$antib
 ```
 
 
-```{r export_bw}
+
+```{r export_bw_for_inspection}
+# Export bw to inspect cluster 7 merged profile
+
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig_inspect/clusters_all/"),recursive = TRUE)
+
 samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
 samples <- samples[samples == params$antibody]
 
-# fragments.ls <- lapply(names(samples),function(x){
-#    fragments <- paste0(params$out_prefix,x,'/outs/fragments.tsv.gz')
-#    fragments <- rtracklayer::import(fragments,format = 'bed')
-#    fragments
-#  })
-# fragments <- Reduce(function(x,y) c(x,y), fragments.ls)
-# fragments <- sort(fragments)
 
-fragments <- rtracklayer::import(con = fragments.path,format = 'bed')
+fragments.path     <- paste0(params$out_prefix,params$antibody,'/fragments.tsv.gz')
+fragments.grange   <- rtracklayer::import(con = fragments.path,format = 'bed')
 
-chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
-chrom.sizes <- chrom.sizes[1:21,]
+chrom.sizes <- getChromInfoFromUCSC(genome = config$general$Version)
+# chrom.sizes <- chrom.sizes[1:21,]
 
-exportBW <- function(object,cluster,fragments){
-  if(class(object) == "Seurat"){
-    cells <- rownames(object@meta.data[object@active.ident == cluster,])
-  }
-  
-  new_read <- GRanges(seqnames = chrom.sizes[,1], 
-          ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
-                          width=1),
-          name = rep("in_silico_extra_read",dim(chrom.sizes)[1]),
-          score = rep(0,dim(chrom.sizes)[1])
-          )
-  
-  fragments.x <- fragments$name %in% cells
-  fragments.x <- fragments[fragments.x]
-  fragments.x <- c(fragments.x,new_read)
-  
-  
-  coverage.x <- coverage(fragments.x)
-  
-  # Option A - normalize by number of reads per sample
-  coverage.x <- coverage.x/(length(fragments.x)/1e6)
-  
-  # Option B - normalize by mean signal (~ enrichment of mean signal)
-  # coverage.x <- coverage.x / mean(unlist(coverage.x))
-  
-  rtracklayer::export.bw(object = coverage.x,paste0(params$out_prefix,params$antibody,"/clustering/bigwig/cluster_",cluster,".bw"))
-}
 
 lapply(levels(brain.merged@active.ident),function(x){
-  exportBW(brain.merged,x,fragments)
+  exportBW(object = brain.merged,
+           cluster = x,
+           fragments = fragments.grange,
+           path =  paste0(params$out_prefix,params$antibody,"/clustering/bigwig_inspect/cluster_",x,".bw"),
+           chrom.sizes = chrom.sizes)
 })
-
-dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/"))
-fragments.x <- fragments[fragments$name %in% colnames(brain.merged)]
-coverage.x  <- coverage(fragments.x) / length(fragments.x)
-rtracklayer::export.bw(object = coverage.x,con = paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/clusters_all.bw"))
-
 ```
 
 # Export marker bed file 
@@ -315,7 +264,7 @@ DefaultAssay(brain.merged) <- 'peaks'
 
 markers.peaks <- FindAllMarkers(brain.merged,min.pct = 0.001,logfc.threshold = 0.1,slot = 'data')
 
-markers.peaks$closest_gene <- ClosestFeature(StringToGRanges(markers.peaks$gene ), genebodyandpromoter.coords.flat)$name
+markers.peaks$closest_gene <- ClosestFeature(regions = StringToGRanges(markers.peaks$gene ), annotation = genebodyandpromoter.coords.flat)$name
 #View(markers.peaks)
 
 markers.peaks.top <- markers.peaks %>% dplyr::filter(avg_logFC > 0) %>% group_by(cluster) %>% top_n(n = 50,wt = avg_logFC)
@@ -329,7 +278,8 @@ write.csv2(  x = markers.peaks.top, file = paste0(params$out_prefix,params$antib
 clusters_order = levels(brain.merged@active.ident)
 
 # Get top markers
-top.markers <- markers.peaks %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% dplyr::filter(p_val_adj < 0.05) %>% top_n(200, wt=avg_logFC)
+top.markers <- markers.peaks %>% group_by(cluster) %>% dplyr::filter(avg_logFC > 0) %>% top_n(200, wt=avg_logFC)
+top.markers <- top.markers %>% dplyr::filter(cluster != "Unknown") %>% droplevels()
 
 # Reorder markers
 top.markers$cluster <- factor(as.character(top.markers$cluster),levels=clusters_order[1:sum(table(top.markers$cluster) > 0)])

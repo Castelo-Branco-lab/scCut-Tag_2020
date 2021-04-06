@@ -24,47 +24,8 @@ rule download_blacklist:
   shell:
     "wget -P {params.out_dir} http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/mm10-mouse/mm10.blacklist.bed.gz"
 
-rule bed_per_cluster_and_replicate:
-  input:
-    fragments = "results/merged/{antibody}/fragments.tsv.gz",
-    barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv"
-  output:
-    directory("results/other_datasets/correlation/{antibody}/bed/")
-  params:
-    script = os.path.dirname(workflow.basedir) + "/scripts/export_bam_per_replicate_and_cluster.py"
-  shell:
-    """
-    python3 {params.script} -f {input.fragments}  -b {input.barcodes}  -o {output} 
-    """
 
-rule bed_to_bam_per_cluster_and_replicate:
-  input:
-    bed = "results/other_datasets/correlation/{antibody}/bed/",
-    genome = "results/mm10.chromSizes",
-  output:
-    directory("results/other_datasets/correlation/{antibody}/bam/")
-  shell:
-    """
-    ls {input.bed}*.bed | while read line; do 
-      BAM=$(basename ${{line/.bed/.bam}})
-      bedToBam -i $line -g {input.genome} > {output}$BAM && samtools index {output}$BAM & 
-    done
-    wait $(jobs -p)
-    """
 
-rule bam_to_bw_bam_per_cluster:
-  input:
-    "results/other_datasets/correlation/{antibody}/bam/"
-  output:
-    directory("results/other_datasets/correlation/{antibody}/bigwig/")
-  threads: 16
-  shell:
-    """
-    ls {input}*.bam | while read line; do
-      BIGWIG=$(basename ${{line/.bam/.bw}})
-      bamCoverage -b $line -o {output}$BIGWIG --normalizeUsing RPKM -p {threads}
-    done
-    """
 
 rule bigwig_summary_all_peaks:
   input:
@@ -118,12 +79,6 @@ rule downscale_prep:
     """
     python3 {params.script} -f {input.fragments} -b {input.barcodes} -n {params.n} -c {params.cluster} -o {output}
     """
-
-rule fetchChromSizes:
-  output:
-    'results/mm10.chromSizes'
-  shell:
-    "fetchChromSizes mm10 > {output}"
 
 rule downscale_bed_to_bam:
   input:

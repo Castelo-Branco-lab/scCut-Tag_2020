@@ -7,6 +7,9 @@ include: 'snakefile_preprocess'
 rule clustering_all:
   input:
     expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
+    expand("results/other_datasets/correlation/{antibody}/bed/", antibody = antibody_dict.keys()),
+    expand("results/other_datasets/correlation/{antibody}/bam/", antibody = antibody_dict.keys()),
+    expand("results/other_datasets/correlation/{antibody}/bigwig/", antibody = antibody_dict.keys()),
 
 
 ########### FINAL TWEAKED CLUSTERING
@@ -35,4 +38,49 @@ rule clustering_final:
   shell:
     " Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(config='{params.config}',out_prefix = '{params.out_prefix}',antibody = '{wildcards.antibody}'))\" "
 
-# 
+
+# Export bed per cluster
+rule bed_per_cluster_and_replicate:
+  input:
+    fragments = "results/{antibody}/fragments.tsv.gz",
+    barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv"
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bed/")
+  params:
+    script = os.path.dirname(workflow.basedir) + "/scripts/export_bam_per_replicate_and_cluster.py"
+  shell:
+    """
+    python3 {params.script} -f {input.fragments}  -b {input.barcodes}  -o {output} 
+    """
+
+# bed per cluster to bam
+
+rule bed_to_bam_per_cluster_and_replicate:
+  input:
+    bed = "results/other_datasets/correlation/{antibody}/bed/",
+    genome = "results/general/mm10.chromSizes",
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bam/")
+  shell:
+    """
+    ls {input.bed}*.bed | while read line; do 
+      BAM=$(basename ${{line/.bed/.bam}})
+      bedToBam -i $line -g {input.genome} > {output}$BAM && samtools index {output}$BAM & 
+    done
+    wait $(jobs -p)
+    """
+
+# Bam per cluster to bw
+rule bam_to_bw_bam_per_cluster:
+  input:
+    "results/other_datasets/correlation/{antibody}/bam/"
+  output:
+    directory("results/other_datasets/correlation/{antibody}/bigwig/")
+  threads: 16
+  shell:
+    """
+    ls {input}*.bam | while read line; do
+      BIGWIG=$(basename ${{line/.bam/.bw}})
+      bamCoverage -b $line -o {output}$BIGWIG --normalizeUsing RPKM -p {threads}
+    done
+    """

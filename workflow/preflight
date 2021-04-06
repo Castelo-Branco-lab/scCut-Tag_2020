@@ -24,3 +24,16 @@ cellranger_dict = {config['samples'][x]['Antibody']: [] for x in config['samples
 for x in config['samples'].keys():
    cellranger_dict[config['samples'][x]['Antibody']].append(config['samples'][x]['cellranger_out'])
 
+
+rule all_prepare:
+  input:
+    "results/general/mm10.chrom.sizes"
+
+rule fetch_chrom_sizes:
+  output:
+    "results/general/{genome}.chromSizes"
+  params:
+    genome = config['general']['Version']
+  shell:
+    "fetchChromSizes {params.genome} > {output}"
+    
