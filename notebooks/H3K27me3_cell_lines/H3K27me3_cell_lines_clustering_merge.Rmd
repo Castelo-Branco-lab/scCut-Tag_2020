@@ -35,9 +35,9 @@ assay <- paste0("bins_",params$window)
 
 
 ```{r create_out_directories}
-e(paste0(params$out_prefix,params$antibody,"/clustering/bigwig_inspect/clusters_all/"),recursive = TRUE)
-e(paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/"),recursive = TRUE)
-e(paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/'))
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig_inspect/clusters_all/"),recursive = TRUE)
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/markers_bed/"),recursive = TRUE)
+dir.create(paste0(params$out_prefix,params$antibody,'/clustering/bam_per_cluster/'))
 ```
 
 
@@ -217,7 +217,7 @@ write.csv2(  x = markers.top,       file = paste0(params$out_prefix,params$antib
 
 
 ```{r export_bw}
-e(paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/"),recursive = TRUE)
+dir.create(paste0(params$out_prefix,params$antibody,"/clustering/bigwig/clusters_all/"),recursive = TRUE)
 
 samples <- unlist(lapply(config$samples,function(x){x$Antibody}))
 samples <- samples[samples == params$antibody]

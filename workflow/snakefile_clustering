@@ -63,9 +63,10 @@ rule bed_to_bam_per_cluster_and_replicate:
     directory("results/other_datasets/correlation/{antibody}/bam/")
   shell:
     """
-    ls {input.bed}*.bed | while read line; do 
+    mkdir {output}
+    ls {input.bed}/*.bed | while read line; do 
       BAM=$(basename ${{line/.bed/.bam}})
-      bedToBam -i $line -g {input.genome} > {output}$BAM && samtools index {output}$BAM & 
+      bedToBam -i $line -g {input.genome} > {output}/$BAM && samtools index {output}/$BAM & 
     done
     wait $(jobs -p)
     """
@@ -79,8 +80,9 @@ rule bam_to_bw_bam_per_cluster:
   threads: 16
   shell:
     """
-    ls {input}*.bam | while read line; do
+    mkdir {output}
+    ls {input}/*.bam | while read line; do
       BIGWIG=$(basename ${{line/.bam/.bw}})
-      bamCoverage -b $line -o {output}$BIGWIG --normalizeUsing RPKM -p {threads}
+      bamCoverage -b $line -o {output}/$BIGWIG --normalizeUsing RPKM -p {threads}
     done
     """
