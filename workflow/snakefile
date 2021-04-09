@@ -11,6 +11,7 @@ include: 'snakefile_integration'
 include: 'snakefile_other_datasets'
 include: 'snakefile_figures'
 include: 'snakefile_scRNA-seq'
+include: 'snakefile_downscale'
 # include: 'snakefile_downstream'
 
 configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
@@ -130,9 +131,9 @@ rule all:
     'results/other_datasets/PCA/PCA_table_brain.npz',
     
     # Downsample fragments by cells
-#    expand('results/other_datasets/downsample/bigwig/fragments_{sample}_{n}.bw',sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
-#    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
-#    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
+    expand('results/other_datasets/downsample/bigwig/fragments_{sample}_{n}.bw',sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
     expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
     
     # Correlation matrix

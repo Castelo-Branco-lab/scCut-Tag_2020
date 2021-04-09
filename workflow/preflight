@@ -27,7 +27,8 @@ for x in config['samples'].keys():
 
 rule all_prepare:
   input:
-    "results/general/mm10.chrom.sizes"
+    "results/general/mm10.chrom.sizes",
+    "results/mm10.blacklist.bed.gz"
 
 rule fetch_chrom_sizes:
   output:
@@ -36,4 +37,12 @@ rule fetch_chrom_sizes:
     genome = config['general']['Version']
   shell:
     "fetchChromSizes {params.genome} > {output}"
-    
+
+rule download_blacklist:
+  output:
+    "results/general/mm10.blacklist.bed.gz"
+  params:
+    out_dir = 'results/'
+  shell:
+    "wget -P {params.out_dir} http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/mm10-mouse/mm10.blacklist.bed.gz"
+

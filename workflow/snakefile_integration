@@ -8,6 +8,7 @@ rule all_integration:
     'results/integration/histone_3active/histone_3active_integrated.Rds',
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
+    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz", antibody = antibody_dict.keys()),
     
 
 ####### H3K4me4 RNA integration

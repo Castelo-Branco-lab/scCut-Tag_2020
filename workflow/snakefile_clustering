@@ -10,6 +10,7 @@ rule clustering_all:
     expand("results/other_datasets/correlation/{antibody}/bed/", antibody = antibody_dict.keys()),
     expand("results/other_datasets/correlation/{antibody}/bam/", antibody = antibody_dict.keys()),
     expand("results/other_datasets/correlation/{antibody}/bigwig/", antibody = antibody_dict.keys()),
+    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
 
 
 ########### FINAL TWEAKED CLUSTERING
@@ -86,3 +87,14 @@ rule bam_to_bw_bam_per_cluster:
       bamCoverage -b $line -o {output}/$BIGWIG --normalizeUsing RPKM -p {threads}
     done
     """
+
+# Correlation matrix for the bam per cluster and replicate
+rule bigwig_summary_all_peaks:
+  input:
+    scCT_bigwig        = "results/other_datasets/correlation/{antibody}/bigwig/",
+    peaks              = "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+  output:
+    matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"
+  threads: 16
+  shell:
+    "multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw -o {output.matrix} --BED {input.peaks} -p {threads}"

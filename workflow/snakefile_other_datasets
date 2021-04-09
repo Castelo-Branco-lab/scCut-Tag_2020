@@ -187,7 +187,8 @@ rule call_peaks_oli_neu:
   input:
     config['CR_GCB']['Oli-neu']['bam']
   output:
-    'results/other_datasets/Oli-neu/macs/Oli-neu_peaks.narrowPeak'
+    'results/other_datasets/Oli-neu/macs/Oli-neu_peaks.narrowPeak',
+    'results/other_datasets/Oli-neu/macs/Oli-neu_summits.bed',
   params:
     outdir = 'results/other_datasets/Oli-neu/macs/',
     name   = 'Oli-neu'

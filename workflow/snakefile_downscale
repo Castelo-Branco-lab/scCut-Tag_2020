@@ -1,0 +1,99 @@
+include: 'preflight'
+include: 'snakefile_clustering'
+include: 'snakefile_other_datasets'
+
+rule downscale_all:
+  input:
+    # Downsample H3K27ac for ABC model
+    expand('results/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam', cluster=['mOL'], antibody=['H3K27ac'], n=[10,20,50,100,200,500,1000,2000,5000]),
+    
+    # Downsample cell lines
+    expand('results/{antibody}/downsample/bam/fragments_{sample}_{n}.bam',antibody = ['H3K27me3_cell_lines'], sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+    expand('results/{antibody}/downsample/bigwig/fragments_{sample}_{n}.bw',antibody = ['H3K27me3_cell_lines'], sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+    
+    # Bulk data 
+    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+    
+
+#######################################################
+rule downsample:
+  input:
+    fragments = "results/{antibody}/fragments.tsv.gz",
+    barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv",
+  params:
+    script  = os.path.dirname(workflow.basedir) + "/scripts/downsample_sc.py",
+    n       = "{n}"
+  output:
+    'results/{antibody}/downsample/bed/fragments_{cluster}_{n}.bed'
+  shell:
+    """
+    python3 {params.script} -f {input.fragments} -b {input.barcodes} -n {params.n} -c {wildcards.cluster} -o {output}
+    """
+
+rule downscale_general_bed_to_bam:
+  input:
+    bed = 'results/{antibody}/downsample/bed/fragments_{cluster}_{n}.bed',
+    chromSizes = 'results/general/mm10.chromSizes'
+  output:
+    bam = 'results/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam'
+  shell:
+    "bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {output.bam}"
+
+rule downscale_bam_to_bw:
+  input:
+    bam = 'results/{antibody}/downsample/bam/{sample}.bam',
+  output:
+    bw = 'results/{antibody}/downsample/bigwig/{sample}.bw'
+  threads: 8
+  shell:
+    "bamCoverage -b {input.bam} -o {output.bw} --normalizeUsing RPKM -p {threads}"
+
+rule downscale_prep_bulk_bw:
+  input:
+    bam = lambda wildcards: {"3T3": "results/other_datasets/3T3_cells/possorted_bam/SRR9889940.bam", \
+                             "mESC": "results/other_datasets/mESC_ENCODE/bam/mESC_rep1.bam", \
+                             "Oli-neu": config['CR_GCB']['Oli-neu']['bam'] }[wildcards.sample.replace("_1","")],
+  output:
+    bw = 'results/other_datasets/downsample/bulk_bigwig/{sample}.bw'
+  threads: 16
+  shell:
+    "bamCoverage -b {input.bam} -o {output.bw} --normalizeUsing RPKM -p {threads}"
+
+
+###################### FIX from here down
+rule compute_matrix:
+  input:
+    sc    = "results/H3K27me3_cell_lines/downsample/bigwig/",
+    bulk  = "results/other_datasets/downsample/bulk_bigwig/{sample}.bw",
+    peaks = lambda wildcards: {"3T3": "/data/proj/GCB_MB/CT/git_test/results/other_datasets/3T3_cells/macs/3T3_summits.bed", \
+                               "mESC": "results/other_datasets/mESC_ENCODE/peaks/ENCFF105NKG.bed", \
+                               "Oli-neu": "results/other_datasets/Oli-neu/macs/Oli-neu_summits.bed"}[wildcards.sample]
+  output:
+    sc_out   = "results/other_datasets/downsample/heatmap/{sample}_sc_matrix.txt.gz",
+    bulk_out = "results/other_datasets/downsample/heatmap/{sample}_bulk_matrix.txt.gz",
+  params:
+  threads: 16
+  shell:
+    """
+    l=$(ls {input.sc}/fragments_{wildcards.sample}*.bw | while read line; do basename $line | sed 's/fragments_{wildcards.sample}_//g' | sed 's/.bw//g' ;done | sort -nr)     
+    files=$(for i in $l; do ls {input.sc}"/fragments_{wildcards.sample}_"$i".bw"; done)                                                                                      # Aim of this is to re-order the files for the heatmap matrix
+    computeMatrix reference-point -S $files       -R {input.peaks} -o {output.sc_out}   -a 10000 -b 10000 -p {threads} --missingDataAsZero
+    computeMatrix reference-point -S {input.bulk} -R {input.peaks} -o {output.bulk_out} -a 10000 -b 10000 -p {threads} --missingDataAsZero
+    """
+
+rule plot_heatmap:
+  input:
+    matrix   = "results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.txt.gz",
+  output:
+    png   = "results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",
+  params:
+    zmax = lambda wildcards: {"3T3": {"sc":"100","bulk": "8"}, "mESC": {"sc": "1000","bulk": "8"}, "Oli-neu": {"sc": "100", "bulk": "8"}}[wildcards.sample][wildcards.method]
+  shell:
+    """
+    plotHeatmap -m {input.matrix}   -o {output.png}   --zMax {params.zmax}; 
+    """
+
+
+##################################################
