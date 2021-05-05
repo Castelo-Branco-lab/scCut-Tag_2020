@@ -1,3 +1,13 @@
+include: 'preflight'
+
+rule ko_all:
+  input:
+    expand("results/other_datasets/kaya_okur/bigwig/{sample}.bw",sample = config['kaya-okur']['samples']),
+    expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample = config['kaya-okur']['samples']),
+    "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
+    
+    
+
 rule download:
   output:
     "results/other_datasets/kaya_okur/bed_src/GSE124690_RAW.tar"
@@ -129,7 +139,7 @@ rule bedToBam_temp:
     index="results/other_datasets/kaya_okur/temp/{sample}.bam.bai"
   shell:
     """
-    bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {ouptut.bam}
+    bedToBam -i {input.bed} -g {input.chromSizes} > {output.bam} && samtools index {output.bam}
     """
 
 rule bam_fix_barcode_tag:
@@ -164,7 +174,8 @@ rule call_peaks_kaya_okur_FrIP:
   input:
     bam="results/other_datasets/kaya_okur/bam/{sample}.bam"
   output:
-    directory("results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/")
+    directory("results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/"),
+    "results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/{sample}_peaks.narrowPeak"
   params:
     outdir = "results/other_datasets/frip_analysis/kaya_okur/{sample}/macs/",
     SRA    = "{sample}"

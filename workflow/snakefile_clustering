@@ -1,16 +1,28 @@
-
 configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
 include: 'preflight'
 include: 'snakefile_preprocess'
+
+import re
+import os
+import glob
 
 # Merge and run clustering together
 rule clustering_all:
   input:
     expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
-    expand("results/other_datasets/correlation/{antibody}/bed/", antibody = antibody_dict.keys()),
-    expand("results/other_datasets/correlation/{antibody}/bam/", antibody = antibody_dict.keys()),
-    expand("results/other_datasets/correlation/{antibody}/bigwig/", antibody = antibody_dict.keys()),
-    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bed/", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bam/", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bigwig/", antibody = antibody_dict.keys()),
+    # Merged bam per cluster
+    [expand('results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam', \
+      antibody = antibody, \
+      cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
+    # Peak callin bam per cluster
+    [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
+      antibody = antibody, \
+      cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
+    
+    # expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
 
 
 ########### FINAL TWEAKED CLUSTERING
@@ -46,7 +58,8 @@ rule bed_per_cluster_and_replicate:
     fragments = "results/{antibody}/fragments.tsv.gz",
     barcodes  = "results/{antibody}/clustering/bam_per_cluster/cluster_barcode_table.csv"
   output:
-    directory("results/other_datasets/correlation/{antibody}/bed/")
+    directory("results/{antibody}/clustering/bam_per_cluster/bed/")
+    #directory("results/other_datasets/correlation/{antibody}/bed/")
   params:
     script = os.path.dirname(workflow.basedir) + "/scripts/export_bam_per_replicate_and_cluster.py"
   shell:
@@ -58,10 +71,10 @@ rule bed_per_cluster_and_replicate:
 
 rule bed_to_bam_per_cluster_and_replicate:
   input:
-    bed = "results/other_datasets/correlation/{antibody}/bed/",
+    bed = "results/{antibody}/clustering/bam_per_cluster/bed/",
     genome = "results/general/mm10.chromSizes",
   output:
-    directory("results/other_datasets/correlation/{antibody}/bam/")
+    directory("results/{antibody}/clustering/bam_per_cluster/bam/")
   shell:
     """
     mkdir {output}
@@ -75,9 +88,9 @@ rule bed_to_bam_per_cluster_and_replicate:
 # Bam per cluster to bw
 rule bam_to_bw_bam_per_cluster:
   input:
-    "results/other_datasets/correlation/{antibody}/bam/"
+    "results/{antibody}/clustering/bam_per_cluster/bam/"
   output:
-    directory("results/other_datasets/correlation/{antibody}/bigwig/")
+    directory("results/{antibody}/clustering/bam_per_cluster/bigwig/")
   threads: 16
   shell:
     """
@@ -88,10 +101,47 @@ rule bam_to_bw_bam_per_cluster:
     done
     """
 
+rule merge_bam_per_cluster:
+  input:
+    'results/{antibody}/clustering/bam_per_cluster/bam/'
+  output:
+    bam   = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam',
+#    index = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam.bai'
+  shell:
+    'samtools merge {output.bam} {input}/{wildcards.cluster}*.bam'
+  
+
+###################### FIX FROM HERE
+# peaks per cluster
+rule call_peaks_bam_per_cluster:
+  input:
+    'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam'
+  output:
+   'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
+  params:
+    outdir    = 'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/',
+  shell:
+    """
+      macs2 callpeak -t {input} \
+        -n {wildcards.cluster} \
+        -f BAMPE \
+        -g mm \
+        --qvalue 1e-10 \
+        --outdir {params.outdir} \
+        --broad \
+        --bdg \
+        --max-gap 1000 \
+        --min-length 500 \
+        --broad-cutoff 0.001 \
+        --llocal 1000000 \
+        --slocal 0
+  """
+
+
 # Correlation matrix for the bam per cluster and replicate
 rule bigwig_summary_all_peaks:
   input:
-    scCT_bigwig        = "results/other_datasets/correlation/{antibody}/bigwig/",
+    scCT_bigwig        = "results/{antibody}/clustering/bam_per_cluster/bam/",
     peaks              = "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
   output:
     matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"

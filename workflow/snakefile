@@ -18,135 +18,166 @@ configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
 
 rule all:
   input:
-		# Bigwig files of raw mapped reads 
-    expand("results/{sample}/bigwig/all_reads.bw",sample = samples_dict.keys()),
-
-		# MACS2 peak calling 
-    expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_dict.keys()),
-    expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_dict.keys()),
-    expand("results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = antibody_dict.keys()),
-    expand("results/merged/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak",antibody = ["H3K27me3"]),
-
-
-    # MEME On merged MACS peaks
-    expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}",npeaks=[1000,5000,10000,25000,50000],antibody = ['Olig2','Rad21'],width=[25,50,100,150,250]),
-
-
-    # Merged files accross replicates
-    expand("results/{sample}/outs/fragments.tsv.gz", antibody = antibody_dict.keys(),sample=samples_dict.keys()),
-    expand("results/merged/{antibody}/fragments.tsv.gz", antibody = antibody_dict.keys(),sample=samples_dict.keys()),  # TODO fix
-
-    # Barcode statistics for cell selection
-    expand("results/{sample}/barcode_statistics/all_barcodes.txt",sample = samples_dict.keys()),
-    expand("results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",sample = samples_dict.keys()),
-    expand("results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",sample = samples_dict.keys()),
-    
-    # Create Seurat objects
+    # Snakefile preprocess
     expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds", sample = samples_dict.keys(),binwidth = config['general']['clustering_window']),
-    
-    # Merge and run clustering together
-    expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
-
-
-    ################ Downstream analysis
-    # Export for metagene
-    expand('results/{antibody}/clustering/markers_bed_genes/',antibody = antibody_dict.keys()),
-
-    # Metagene plot
-    expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_plot.png",antibody_bw = antibody_dict.keys(),antibody_bed = antibody_dict.keys()),
-    expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_genes.png",antibody_bw = antibody_dict.keys(),antibody_bed = antibody_dict.keys()),
-    expand('results/{antibody}/metagene/metagene_{RNA}_RNA_{genes}.png',antibody = antibody_dict.keys(),RNA=["Sten","Sox10"],genes=['promoters','genes_scaled']),
-
-    # Export bam per cluster
-    'results/scATAC_P50/clustering/bam_per_cluster/scATAC/',
-    [expand('results/{antibody}/clustering/bam_per_cluster/{sample}/',antibody = antibody, sample = antibody_dict[antibody]) for antibody in antibody_list],
-    'results/merged/H3K27me3/bam_per_cluster/',
-
-    # Peak callin bam per cluster
-    [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',antibody = antibody, \
-      cluster=list(set([os.path.basename(x).replace("_out.bam","") for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/*/*.bam')]))) for antibody in antibody_list],
-    
-    # integration
-    'results/Olig2/integration/integrated.Rds',
-    'results/Rad21/integration/integrated.Rds',
-    'results/integration/histone_3active/histone_3active_integrated.Rds',
-    'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds',
-    'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
-
-    # GO terms
-    'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
-
-    # scATAC
+    expand("results/{sample}/bigwig/all_reads.bw", sample = samples_dict.keys()),
+    expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak", sample = samples_dict.keys()),
+    expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak", sample = samples_dict.keys()),
+    expand("results/{sample}/outs/fragments.tsv.gz", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/peaks_barcodes_broad.txt", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/all_barcodes.txt", sample = samples_dict.keys()),
+    expand("results/{antibody}/fragments.tsv.gz", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/possorted_bam.bam", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/macs/narrow/{antibody}_summits.bed", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/fragments.tsv.gz",antibody = antibody_dict.keys()),
+  
+    # SNakefile scATAC
     'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+    'results/scATAC_P50/clustering/bam_per_cluster/scATAC/'
+    
+    # Snakefile scRNA-seq
+    'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
+    expand('results/{RNA}/clustering/markers_bed/',RNA=["Sten_RNA","Sox10_RNA"]),
+    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
+    'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
+    'results/Sox10_RNA/integration/scRNA_integrated.Rds',
+    'results/marques_RNA/clustering/01.clustering.Rds'
+  
 
-    # Pseudotime
-    'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds',
-    'results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds',
 
-    # H3K4me3 spreading
-    "results/H3K4me3/spreading/spreading.Rdata",
-    "results/H3K4me3/spreading/breadth.Rdata",
-
-    # Olig2 chromvar
-    'results/Olig2/chromVAR/chromVAR.Rdata',
-
-    # H3k27ac cicero
-    'results/H3K27ac/cicero/cicero_image.Rdata',
-    
-    # Grosselin
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA = list(config['grosselin']['scChIP'].keys())),
-#    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA=config['grosselin']['scChIP']),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/frip_analysis/grosselin/{SRA}/{SRA}_cell_statistics.txt",SRA = list(config['grosselin']['scChIP'].keys())),
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/count_matrix/{SRA}_CountTable_hg38.txt.gz",SRA = list(config['grosselin']['scChIP'].keys())),
-    
-    
-    # Kaya-Okur
-    expand("results/other_datasets/kaya_okur/bed/sorted_{s}.bed.gz.tbi",s = config['kaya-okur']['samples']),
-    expand("results/other_datasets/kaya_okur/bam/{s}.bam",s = config['kaya-okur']['samples']),
-    expand("results/other_datasets/kaya_okur/bigwig/{s}.bw",s = config['kaya-okur']['samples']),
-    
-    # 3T3
-    expand("results/other_datasets/3T3_cells/bigwig/{SRA}.bw",SRA = [config['3T3']['samples'][x] for x in ['rep1','rep2']]),
-    'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak',
-    
-    # mESC
-    "results/other_datasets/mESC_ENCODE/macs/mESC_peaks.narrowPeak",
-     
-    # Fingerprint analysis
-    "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
-    "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
-    "results/other_datasets/fingerprint_analysis/scCT_H3K27me3_fingerprint.txt",
-    "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
-    
-    # FrIP analysis
-    expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample=['K562_H3K27me3_iCell8','K562_H3K4me2_iCell8','H1_H3K27me3_iCell8']),
-    expand("results/other_datasets/frip_analysis/scCT/{sample}/all_fragments.txt",antibody="H3K27me3",sample=["H3K27me3_N" + str(x) for x in [1,2,3,4]] + ["H3K27me3_cell_lines_1","H3K27me3_cell_lines_2"]),
-    
-    # PCA analysis
-    'results/other_datasets/PCA/PCA_table_cell_lines.npz',
-    'results/other_datasets/PCA/PCA_table_brain.npz',
-    
-    # Downsample fragments by cells
-    expand('results/other_datasets/downsample/bigwig/fragments_{sample}_{n}.bw',sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
-    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
-    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
-    expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
-    
-    # Correlation matrix
-    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody=["H3K27me3_cell_lines"]),
-    
-    # Figures
-    "results/Figures/revision/cell_lines_genome_browser.pdf",
-    "results/Figures/revision/brain_genome_browser.pdf",
-    expand("results/Figures/revision/metagene_heatmaps/{sample}_{method}_matrix.pdf",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
-    
-    
-    # 
-    expand('results/merged/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam',cluster=['mOL'],antibody=['H3K27ac'],n=[10,20,50,100,200,500,1000,2000,5000])
+# rule all:
+#   input:
+#     # Bigwig files of raw mapped reads
+#     expand("results/{sample}/bigwig/all_reads.bw",sample = samples_dict.keys()),
+#
+#     # MACS2 peak calling
+#     expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak",sample = samples_dict.keys()),
+#     expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak",sample = samples_dict.keys()),
+#     expand("results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = antibody_dict.keys()),
+#     expand("results/merged/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak",antibody = ["H3K27me3"]),
+#
+#
+#     # MEME On merged MACS peaks
+#     expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}",npeaks=[1000,5000,10000,25000,50000],antibody = ['Olig2','Rad21'],width=[25,50,100,150,250]),
+#
+#
+#     # Merged files accross replicates
+#     expand("results/{sample}/outs/fragments.tsv.gz", antibody = antibody_dict.keys(),sample=samples_dict.keys()),
+#     expand("results/merged/{antibody}/fragments.tsv.gz", antibody = antibody_dict.keys(),sample=samples_dict.keys()),  # TODO fix
+#
+#     # Barcode statistics for cell selection
+#     expand("results/{sample}/barcode_statistics/all_barcodes.txt",sample = samples_dict.keys()),
+#     expand("results/{sample}/barcode_statistics/peaks_barcodes_narrow.txt",sample = samples_dict.keys()),
+#     expand("results/{sample}/barcode_statistics/peaks_barcodes_broad.txt",sample = samples_dict.keys()),
+#
+#     # Create Seurat objects
+#     expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds", sample = samples_dict.keys(),binwidth = config['general']['clustering_window']),
+#
+#     # Merge and run clustering together
+#     expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
+#
+#
+#     ################ Downstream analysis
+#     # Export for metagene
+#     expand('results/{antibody}/clustering/markers_bed_genes/',antibody = antibody_dict.keys()),
+#
+#     # Metagene plot
+#     expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_plot.png",antibody_bw = antibody_dict.keys(),antibody_bed = antibody_dict.keys()),
+#     expand("results/{antibody_bw}/metagene/{antibody_bed}/metagene_genes.png",antibody_bw = antibody_dict.keys(),antibody_bed = antibody_dict.keys()),
+#     expand('results/{antibody}/metagene/metagene_{RNA}_RNA_{genes}.png',antibody = antibody_dict.keys(),RNA=["Sten","Sox10"],genes=['promoters','genes_scaled']),
+#
+#     # Export bam per cluster
+#     'results/scATAC_P50/clustering/bam_per_cluster/scATAC/',
+#     [expand('results/{antibody}/clustering/bam_per_cluster/{sample}/',antibody = antibody, sample = antibody_dict[antibody]) for antibody in antibody_list],
+#     'results/merged/H3K27me3/bam_per_cluster/',
+#
+#     # Peak callin bam per cluster
+#     [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',antibody = antibody, \
+#       cluster=list(set([os.path.basename(x).replace("_out.bam","") for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/*/*.bam')]))) for antibody in antibody_list],
+#
+#     # integration
+#     'results/Olig2/integration/integrated.Rds',
+#     'results/Rad21/integration/integrated.Rds',
+#     'results/integration/histone_3active/histone_3active_integrated.Rds',
+#     'results/integration/H3K4me3_RNA/H3K4me3_RNA_coembed.Rds',
+#     'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
+#
+#     # GO terms
+#     'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
+#
+#     # scATAC
+#     'results/scATAC_P50/clustering/clustering_scATAC.Rds',
+#
+#     # Pseudotime
+#     'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds',
+#     'results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds',
+#
+#     # H3K4me3 spreading
+#     "results/H3K4me3/spreading/spreading.Rdata",
+#     "results/H3K4me3/spreading/breadth.Rdata",
+#
+#     # Olig2 chromvar
+#     'results/Olig2/chromVAR/chromVAR.Rdata',
+#
+#     # H3k27ac cicero
+#     'results/H3K27ac/cicero/cicero_image.Rdata',
+#
+#     # Grosselin
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/barcode/{SRA}_read_barcodes.txt",SRA = list(config['grosselin']['scChIP'].keys())),
+# #    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA=config['grosselin']['scChIP']),
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/bigwig/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/{SRA}.bw",SRA = list(config['grosselin']['scChIP'].keys())),
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/bowtie2/macs/{SRA}_peaks.narrowPeak",SRA = list(config['grosselin']['scChIP'].keys())),
+#     expand("results/other_datasets/frip_analysis/grosselin/{SRA}/{SRA}_cell_statistics.txt",SRA = list(config['grosselin']['scChIP'].keys())),
+#     expand("results/other_datasets/grosselin_scChIP/{SRA}/count_matrix/{SRA}_CountTable_hg38.txt.gz",SRA = list(config['grosselin']['scChIP'].keys())),
+#
+#
+#     # Kaya-Okur
+#     expand("results/other_datasets/kaya_okur/bed/sorted_{s}.bed.gz.tbi",s = config['kaya-okur']['samples']),
+#     expand("results/other_datasets/kaya_okur/bam/{s}.bam",s = config['kaya-okur']['samples']),
+#     expand("results/other_datasets/kaya_okur/bigwig/{s}.bw",s = config['kaya-okur']['samples']),
+#
+#     # 3T3
+#     expand("results/other_datasets/3T3_cells/bigwig/{SRA}.bw",SRA = [config['3T3']['samples'][x] for x in ['rep1','rep2']]),
+#     'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak',
+#
+#     # mESC
+#     "results/other_datasets/mESC_ENCODE/macs/mESC_peaks.narrowPeak",
+#
+#     # Fingerprint analysis
+#     "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
+#     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
+#     "results/other_datasets/fingerprint_analysis/scCT_H3K27me3_fingerprint.txt",
+#     "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
+#
+#     # FrIP analysis
+#     expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample=['K562_H3K27me3_iCell8','K562_H3K4me2_iCell8','H1_H3K27me3_iCell8']),
+#     expand("results/other_datasets/frip_analysis/scCT/{sample}/all_fragments.txt",antibody="H3K27me3",sample=["H3K27me3_N" + str(x) for x in [1,2,3,4]] + ["H3K27me3_cell_lines_1","H3K27me3_cell_lines_2"]),
+#
+#     # PCA analysis
+#     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
+#     'results/other_datasets/PCA/PCA_table_brain.npz',
+#
+#     # Downsample fragments by cells
+#     expand('results/other_datasets/downsample/bigwig/fragments_{sample}_{n}.bw',sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+#     expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
+#     expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
+#     expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+#
+#     # Correlation matrix
+#     expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody=["H3K27me3_cell_lines"]),
+#
+#     # Figures
+#     "results/Figures/revision/cell_lines_genome_browser.pdf",
+#     "results/Figures/revision/brain_genome_browser.pdf",
+#     expand("results/Figures/revision/metagene_heatmaps/{sample}_{method}_matrix.pdf",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+#
+#
+#     #
+#     expand('results/merged/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam',cluster=['mOL'],antibody=['H3K27ac'],n=[10,20,50,100,200,500,1000,2000,5000])
 
 
 # Fingerprint analysis

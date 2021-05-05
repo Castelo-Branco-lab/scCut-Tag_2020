@@ -6,8 +6,6 @@ inclued: 'snakfile_other_datasets'
 
 rule downstream_all:
   input:
-    # Split bam per cluster and sample
-    [expand('results/{antibody}/clustering/bam_per_cluster/{sample}/',antibody = antibody, sample = antibody_dict[antibody]) for antibody in antibody_list],
     # H3K27me3 fingerprint analysis
     expand("results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt",antibody = ["H3K27me3"]),
     # FriP analysis for revision
@@ -16,39 +14,20 @@ rule downstream_all:
     # PCA analysis
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
+    # Meme motif analysis
+    expand("results/{antibody}/merged/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
     
-
-
-# Fingerprint analysis
-# Merge per cluster
-rule merge_bam_per_cluster:
-  input:
-    "results/{antibody}/clustering/bam_per_cluster/"
-  output:
-    directory('results/merged/{antibody}/bam_per_cluster/')
-  params:
-    bam_per_cluster_dir =  "results/{antibody}/clustering/bam_per_cluster/"
-  threads:16
-  shell:
-    """
-    clusters=$(ls {params.bam_per_cluster_dir}/*/*.bam | while read line; do basename $line| sed 's/_out.bam//g'; done | sort | uniq); 
-    for cluster in $clusters; do  
-      infiles=$(find {params.bam_per_cluster_dir} -name $cluster"*.bam") ; 
-      samtools merge -@ {threads} "{output}"$cluster"_merged.bam" $infiles; 
-      samtools index {output}
-    done
-    """
 
 rule generate_fingerprint_heatmap_scCT:
   input:
-    merged_bam        = "results/merged/{antibody}/possorted_bam.bam",
+    merged_bam        = "results/{antibody}/possorted_bam.bam",
     per_replicate_bam = expand("{cellranger}/outs/possorted_bam.bam",cellranger = [config['samples'][x]['cellranger_out'] for x in config['samples'] if config['samples'][x]['Antibody'] == "H3K27me3"]),
-    per_cluster_bam   = 'results/merged/{antibody}/bam_per_cluster/',
+    per_cluster_bam   = 'results/{antibody}/bam_per_cluster/bam_merged/',
   output:
     "results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt"
   threads: 16
   params:
-    per_cluster_bam = 'results/merged/H3K27me3/bam_per_cluster/*.bam'
+    per_cluster_bam = 'results/{antibody}/bam_per_cluster/bam_merged/*.bam'
   shell:
     """
       plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {params.per_cluster_bam} -p 16
@@ -58,7 +37,6 @@ rule generate_fingerprint_heatmap_scCT:
 
 rule call_peaks_scCT_FrIP:
   input:
-    #bam="results/{sample}/outs/fragments.tsv.gz" # Cellranger fragments.tsv output
     bam = lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
   output:
     directory("results/other_datasets/frip_analysis/scCT/{sample}/macs/")
@@ -113,4 +91,45 @@ rule PCA:
     multiBigwigSummary BED-file -b {input.cell_lines}*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
     multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
     """
+
+
+# Call peaks on pseudobulk data 
+
+rule macs_merged:
+  input:
+    lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
+  output:
+    "results/{antibody}/merged/macs/narrow/{antibody}_peaks.narrowPeak",
+    "results/{antibody}/merged/macs/broad/{antibody}_peaks.broadPeak",
+    "results/{antibody}/merged/macs/narrow/{antibody}_summits.bed",
+  params:
+    out_narrow   = "results/{antibody}/merged/macs/narrow/",
+    out_broad    = "results/{antibody}/merged/macs/broad/",
+  shell:
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_narrow} -q 0.05 -B --SPMR --keep-dup=1 2>&1 && "
+    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_broad} --broad-cutoff=0.1 --broad -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
+
+# Motif search
+rule motif_search:
+  input:
+      peaks     = "results/{antibody}/merged/macs/narrow/{antibody}_summits.bed",
+      blacklist = "results/mm10.blacklist.bed.gz"
+  output:
+      meme_out           = directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),
+  params:
+      summits_filtered   = "results/merged/{antibody}/MEME_{width}/summits_filtered_{npeaks}.bed",
+      top_summits        = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.bed",
+      top_summits_padded = "results/merged/{antibody}/MEME_{width}/top_summits_padded_{npeaks}.bed",
+      top_summits_fa     = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.fa",
+      genome_fa          = config['db']['genome_fa'],
+      npeaks             = "{npeaks}",
+      #out                = "results/merged/{antibody}/MEME_{width}/out_{npeaks}",
+  shell:
+#      "set +o pipefail;"
+      "cat {input.peaks} | grep -v -e 'chrM' | sort-bed - | bedops -n 1 - {input.blacklist} > {params.summits_filtered};"
+      "sort -k5gr {params.summits_filtered} | head -{params.npeaks} | sort-bed - > {params.top_summits};"
+      "bedops --range {wildcards.width} -u {params.top_summits} > {params.top_summits_padded};"
+      "bedtools getfasta -fi {params.genome_fa} -bed {params.top_summits_padded} -fo {params.top_summits_fa};"
+      "conda activate meme; " # MEME=5.1.1 env
+      "meme-chip -oc {output.meme_out} -dreme-m 10 -meme-nmotifs 10 {params.top_summits_fa};"
 

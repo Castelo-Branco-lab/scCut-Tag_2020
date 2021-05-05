@@ -4,10 +4,20 @@ include: 'preflight'
 
 rule all_preprocess:
   input:
-    #expand("results/{sample}/cell_picking/metadata.csv",binwidth = config['general']['clustering_window'], sample = samples_dict.keys()), 
     expand("results/{sample}/seurat/bin_{binwidth}/Seurat_object.Rds", sample = samples_dict.keys(),binwidth = config['general']['clustering_window']),
+    expand("results/{sample}/bigwig/all_reads.bw", sample = samples_dict.keys()),
+    expand("results/{sample}/macs/narrow/{sample}_peaks.narrowPeak", sample = samples_dict.keys()),
+    expand("results/{sample}/macs/broad/{sample}_peaks.broadPeak", sample = samples_dict.keys()),
+    expand("results/{sample}/outs/fragments.tsv.gz", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/peaks_barcodes_broad.txt", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/peaks_barcodes_narrow.txt", sample = samples_dict.keys()),
+    expand("results/{sample}/barcode_metrics/all_barcodes.txt", sample = samples_dict.keys()),
+    expand("results/{antibody}/fragments.tsv.gz", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/possorted_bam.bam", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/macs/narrow/{antibody}_summits.bed", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak", antibody = antibody_dict.keys()),
     expand("results/{antibody}/fragments.tsv.gz",antibody = antibody_dict.keys()),
-    
+
 rule bam_to_bw:
     input:
         lambda wildcards: config['samples'][wildcards.sample]['cellranger_out'] + '/outs/possorted_bam.bam'
@@ -46,12 +56,12 @@ rule macs_merged:
   input:
     lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
   output:
-    "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
-    "results/merged/{antibody}/macs/broad/{antibody}_peaks.broadPeak",
-    "results/merged/{antibody}/macs/narrow/{antibody}_summits.bed",
+    "results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+    "results/{antibody}/macs/broad/{antibody}_peaks.broadPeak",
+    "results/{antibody}/macs/narrow/{antibody}_summits.bed",
   params:
-    out_narrow   = "results/merged/{antibody}/macs/narrow/",
-    out_broad    = "results/merged/{antibody}/macs/broad/",
+    out_narrow   = "results/{antibody}/macs/narrow/",
+    out_broad    = "results/{antibody}/macs/broad/",
   shell:
     "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_narrow} -q 0.05 -B --SPMR --keep-dup=1 2>&1 && "
     "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_broad} --broad-cutoff=0.1 --broad -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
@@ -60,9 +70,9 @@ rule macs_merged_for_revision:
   input:
     lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
   output:
-    "results/merged/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak",
+    "results/{antibody}/macs/for_revision/{antibody}_peaks.narrowPeak",
   params:
-    out_revision = "results/merged/{antibody}/macs/for_revision/"
+    out_revision = "results/{antibody}/macs/for_revision/"
   shell:
     "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_revision} --nomodel  --max-gap 2500 --nolambda 2>&1" # --slocal 1000000 --llocal 1000000 "
 
@@ -110,7 +120,7 @@ rule merge_bam:
     input:
         lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
     output:
-        "results/merged/{antibody}/possorted_bam.bam"
+        "results/{antibody}/possorted_bam.bam"
     threads: 8
     shell:
         "samtools merge --threads {threads} {output} {input} && samtools index {output}" 
