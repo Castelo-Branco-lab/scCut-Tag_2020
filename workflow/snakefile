@@ -44,6 +44,13 @@ rule all:
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
     'results/Sox10_RNA/integration/scRNA_integrated.Rds',
     'results/marques_RNA/clustering/01.clustering.Rds'
+    
+    # Snakefile Kaya-Okur
+    expand("results/other_datasets/kaya_okur/bigwig/{sample}.bw",sample = config['kaya-okur']['samples']),
+    expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample = config['kaya-okur']['samples']),
+    "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
+    
+    
   
 
 

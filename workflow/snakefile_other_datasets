@@ -96,7 +96,7 @@ rule mES_bam_to_bw:
     'results/other_datasets/mESC_ENCODE/bam/{sample}.bam'
   output:
     'results/other_datasets/mESC_ENCODE/bigwig/{sample}.bw'
-  threads: 16
+  threads: 8
   shell:
     "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
 
@@ -120,10 +120,10 @@ rule fastq_dump_3T3:
   params:
     SRA = "{sample}",
     out_dir = "results/other_datasets/3T3_cells/fastq/"
-  threads: 26
+  threads: 8
   shell:
     """
-    fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}*.fastq
+    fasterq-dump --split-files --threads {threads} --progress --outdir {params.out_dir} {params.SRA} && gzip {params.out_dir}/{wildcards.sample}*.fastq
     """
 
 rule trim_3T3:
@@ -145,7 +145,7 @@ rule map_3T3:
     fastq_2 = "results/other_datasets/3T3_cells/fastq/{sample}_2_val_2.fq.gz",
   output:
     bam        = "results/other_datasets/3T3_cells/bam/{sample}.bam"
-  threads: 16
+  threads: 8
   params:
     mm10_index = "/data/proj/GCB_MB/reference/bowtie2_index/mm10/mm10"
   shell:
@@ -156,7 +156,7 @@ rule sort_bam_3T3:
     bam        = "results/other_datasets/3T3_cells/bam/{sample}.bam"
   output:
     bam        = "results/other_datasets/3T3_cells/possorted_bam/{sample}.bam"
-  threads: 16
+  threads: 8
   shell:
     "samtools sort -@ {threads} -o {output} {input} && samtools index {output}"
   
@@ -165,13 +165,13 @@ rule bam_to_bw_3T3:
     bam = "results/other_datasets/3T3_cells/possorted_bam/{sample}.bam"
   output:
     bam = "results/other_datasets/3T3_cells/bigwig/{sample}.bw"
-  threads: 16
+  threads: 8
   shell:
     "bamCoverage -b {input} -o {output} --binSize 10 -p {threads}"
     
 rule call_peaks_3T3:
   input:
-    expand("results/other_datasets/3T3_cells/possorted_bam/{sample}.bam",sample = [config['3T3']['samples'][x] for x in ['rep1','rep2']])
+    expand("results/other_datasets/3T3_cells/possorted_bam/{sample}.bam",sample = [x for x in config['3T3']['samples'].values()])
   output:
     'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak'
   params:
@@ -203,7 +203,7 @@ rule fingerprint_bulk:
     np     = "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.npz",
     matrix = "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
   params:
-  threads: 16
+  threads: 8
   shell:
     "multiBigwigSummary bins -o {output.np} --outRawCounts {output.matrix} -b {input} -p {threads}"
 

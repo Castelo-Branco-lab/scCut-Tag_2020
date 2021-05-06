@@ -1,3 +1,17 @@
+include: 'preflight'
+
+rule grosselin_all:
+  input:
+    expand("results/other_datasets/frip_analysis/grosselin/{sample}/{sample}_all.txt", sample = config['grosselin']['scChIP'].keys()),
+    expand("results/other_datasets/grosselin_scChIP/{sample}/count_matrix/{sample}_CountTable_hg38.txt.gz", sample = config['grosselin']['scChIP'].keys()),
+    expand("results/other_datasets/grosselin_scChIP/{sample}/bigwig/{sample}.bw",sample = config['grosselin']['scChIP'].keys()),
+    expand("results/other_datasets/grosselin_scChIP/{sample}/bowtie2/{sample}.bw", sample = config['grosselin']['scChIP'].keys()),
+    expand("results/other_datasets/grosselin_scChIP/{sample}/macs/{sample}_peaks.narrowPeak", sample = config['grosselin']['scChIP'].keys()),
+    "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
+
+    
+
+
 rule download_matrix:
   output:
     dummy    = "results/other_datasets/grosselin_scChIP/{sample}/count_matrix/{sample}_CountTable_hg38.txt.gz" 
@@ -66,7 +80,8 @@ rule call_peaks_grosselin:
 
 rule plot_fingerprint_grosselin:
   input:
-    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = list(config['grosselin']['scChIP'].keys()))
+#    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/possorted_{SRA}.bam",SRA = list(config['grosselin']['scChIP'].keys())),
+    expand("results/other_datasets/grosselin_scChIP/{SRA}/barcodes/mapping/genome/{SRA}.bam",SRA = list(config['grosselin']['scChIP'].keys()))
   output:
     "results/other_datasets/fingerprint_analysis/Grosselin_fingerprint.txt",
   threads: 12
