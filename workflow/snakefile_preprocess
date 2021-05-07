@@ -120,10 +120,11 @@ rule merge_bam:
     input:
         lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
     output:
-        "results/{antibody}/possorted_bam.bam"
+        bam   = "results/{antibody}/possorted_bam.bam",
+        index = "results/{antibody}/possorted_bam.bam.bai",
     threads: 8
     shell:
-        "samtools merge --threads {threads} {output} {input} && samtools index {output}" 
+        "samtools merge --threads {threads} {output.bam} {input} && samtools index {output.bam}" 
 
 rule merge_fragments:
     input:

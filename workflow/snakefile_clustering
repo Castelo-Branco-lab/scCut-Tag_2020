@@ -106,9 +106,10 @@ rule merge_bam_per_cluster:
     'results/{antibody}/clustering/bam_per_cluster/bam/'
   output:
     bam   = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam',
-#    index = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam.bai'
+    index = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam.bai'
+  threads: 8
   shell:
-    'samtools merge {output.bam} {input}/{wildcards.cluster}*.bam'
+    'samtools merge -@ {threads} - {input}/{wildcards.cluster}*.bam | samtools sort > {output.bam} && samtools index {output.bam}'
   
 
 ###################### FIX FROM HERE

@@ -1,10 +1,12 @@
 include: 'preflight'
 include: 'snakefile_preprocess'
 include: 'snakefile_clustering'
-inclued: 'snakfile_other_datasets'
+include: 'snakefile_other_datasets'
+include: 'snakefile_kaya_okur'
 
 
-rule downstream_all:
+
+rule bam_files_all:
   input:
     # H3K27me3 fingerprint analysis
     expand("results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt",antibody = ["H3K27me3"]),
@@ -15,22 +17,26 @@ rule downstream_all:
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
     # Meme motif analysis
-    expand("results/{antibody}/merged/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
+    expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
+    expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
     
 
 rule generate_fingerprint_heatmap_scCT:
   input:
     merged_bam        = "results/{antibody}/possorted_bam.bam",
+    bam_index         = "results/{antibody}/possorted_bam.bam.bai",
     per_replicate_bam = expand("{cellranger}/outs/possorted_bam.bam",cellranger = [config['samples'][x]['cellranger_out'] for x in config['samples'] if config['samples'][x]['Antibody'] == "H3K27me3"]),
-    per_cluster_bam   = 'results/{antibody}/bam_per_cluster/bam_merged/',
+    per_cluster_bam   = lambda wildcards: expand("results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam", \
+                                cluster = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + wildcards.antibody + '/clustering/bam_per_cluster/bam/*.bam')])), \
+                                antibody = wildcards.antibody)
   output:
     "results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt"
   threads: 16
   params:
-    per_cluster_bam = 'results/{antibody}/bam_per_cluster/bam_merged/*.bam'
+    per_cluster_bam = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/*.bam'
   shell:
     """
-      plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {params.per_cluster_bam} -p 16
+      plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {input.per_cluster_bam} -p 16
     """
 
 # FrIP analysis
@@ -63,7 +69,6 @@ rule intersect_fragments_with_peaks:
     bedtools intersect -a {input.fragments} -b {input.peaks}{params.sample}_peaks.narrowPeak -wa | cut -f4 | sort | uniq -c > {output.peak_fragments}
     """
 
-
 # PCA analysis
 rule PCA:
   input:
@@ -72,7 +77,7 @@ rule PCA:
     markers_cell_lines = 'results/H3K27me3_cell_lines/clustering/markers_bed/',
     cell_lines         = "results/H3K27me3_cell_lines/clustering/bigwig/",
     bonev_CN           = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
-    matsuda_MGL        = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
+    matsuda_MGL        = "results/other_datasets/matsuda/GSM2800523_microglia_H3K27me3.bw",
     OPCs_GCB           = config['CR_GCB']['OPC']['bigwig'],     # Deposit to GEO and fix link
     Oli_neu_GCB        = config['CR_GCB']['Oli-neu']['bigwig'],   # Deposit to GEO and fix link
     mESC_bigwig_1      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep1.bw',
@@ -86,34 +91,18 @@ rule PCA:
     markers_brain      = 'results/other_datasets/PCA/markers_brain.bed',
   shell:
     """
-    ls {input.markers_cell_lines}*.bed | while read line; do head -100 $line >> {output.markers_cell_lines}; done 
-    ls {input.markers_brain}*.bed | while read line; do head -100 $line >> {output.markers_brain}; done 
-    multiBigwigSummary BED-file -b {input.cell_lines}*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
-    multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
+    ls {input.markers_cell_lines}/*.bed | while read line; do head -100 $line >> {output.markers_cell_lines}; done 
+    ls {input.markers_brain}/*.bed | while read line; do head -100 $line >> {output.markers_brain}; done 
+    multiBigwigSummary BED-file -b {input.cell_lines}/*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
+    multiBigwigSummary BED-file -b {input.scCT_bigwig}/*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
     """
 
-
-# Call peaks on pseudobulk data 
-
-rule macs_merged:
-  input:
-    lambda wildcards: [x + '/outs/possorted_bam.bam' for x in cellranger_dict[wildcards.antibody] ]
-  output:
-    "results/{antibody}/merged/macs/narrow/{antibody}_peaks.narrowPeak",
-    "results/{antibody}/merged/macs/broad/{antibody}_peaks.broadPeak",
-    "results/{antibody}/merged/macs/narrow/{antibody}_summits.bed",
-  params:
-    out_narrow   = "results/{antibody}/merged/macs/narrow/",
-    out_broad    = "results/{antibody}/merged/macs/broad/",
-  shell:
-    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_narrow} -q 0.05 -B --SPMR --keep-dup=1 2>&1 && "
-    "macs2 callpeak -t {input} -g mm -f BAMPE -n {wildcards.antibody} --outdir {params.out_broad} --broad-cutoff=0.1 --broad -q 0.05 -B --SPMR --keep-dup=1 2>&1 "
 
 # Motif search
 rule motif_search:
   input:
-      peaks     = "results/{antibody}/merged/macs/narrow/{antibody}_summits.bed",
-      blacklist = "results/mm10.blacklist.bed.gz"
+      peaks     = "results/{antibody}/macs/narrow/{antibody}_summits.bed",
+      blacklist = "results/general/mm10.blacklist.bed.gz"
   output:
       meme_out           = directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),
   params:
