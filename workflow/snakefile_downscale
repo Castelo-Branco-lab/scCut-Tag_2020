@@ -57,7 +57,7 @@ rule downscale_prep_bulk_bw:
                              "Oli-neu": config['CR_GCB']['Oli-neu']['bam'] }[wildcards.sample.replace("_1","")],
   output:
     bw = 'results/other_datasets/downsample/bulk_bigwig/{sample}.bw'
-  threads: 16
+  threads: 8
   shell:
     "bamCoverage -b {input.bam} -o {output.bw} --normalizeUsing RPKM -p {threads}"
 
@@ -74,7 +74,7 @@ rule compute_matrix:
     sc_out   = "results/other_datasets/downsample/heatmap/{sample}_sc_matrix.txt.gz",
     bulk_out = "results/other_datasets/downsample/heatmap/{sample}_bulk_matrix.txt.gz",
   params:
-  threads: 16
+  threads: 8
   shell:
     """
     l=$(ls {input.sc}/fragments_{wildcards.sample}*.bw | while read line; do basename $line | sed 's/fragments_{wildcards.sample}_//g' | sed 's/.bw//g' ;done | sort -nr)     

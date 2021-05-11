@@ -50,9 +50,49 @@ rule all:
     expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample = config['kaya-okur']['samples']),
     "results/other_datasets/fingerprint_analysis/Kaya_okur_fingerprint.txt",
     
+    # Snakefile clustering
+    expand("results/{antibody}/clustering/01.clustering.Rds",antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bed/", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bam/", antibody = antibody_dict.keys()),
+    expand("results/{antibody}/clustering/bam_per_cluster/bigwig/", antibody = antibody_dict.keys()),
+    [expand('results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam', \
+      antibody = antibody, \
+      cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
+    [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
+      antibody = antibody, \
+      cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
     
-  
-
+    # Snakefile downscale 
+    expand('results/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam', cluster=['mOL'], antibody=['H3K27ac'], n=[10,20,50,100,200,500,1000,2000,5000]),
+    expand('results/{antibody}/downsample/bam/fragments_{sample}_{n}.bam',antibody = ['H3K27me3_cell_lines'], sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+    expand('results/{antibody}/downsample/bigwig/fragments_{sample}_{n}.bw',antibody = ['H3K27me3_cell_lines'], sample=['Oli-neu',"3T3","mESC"],n=[10,20,50,100,200,500,1000,2000,5000]),
+    expand('results/other_datasets/downsample/bulk_bigwig/{sample}.bw',sample=['3T3','mESC']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{s}_matrix.txt.gz",sample = ['3T3','mESC'], s = ['sc','bulk']),
+    expand("results/other_datasets/downsample/heatmap/{sample}_{method}_matrix.png",sample = ['3T3','mESC','Oli-neu'],method=['sc','bulk']),
+    
+    # Snakefile meta_analysis
+    expand("results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt",antibody = ["H3K27me3"]),
+    expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample=['K562_H3K27me3_iCell8','K562_H3K4me2_iCell8','H1_H3K27me3_iCell8']),
+    expand("results/other_datasets/frip_analysis/scCT/{sample}/all_fragments.txt",antibody="H3K27me3",sample=["H3K27me3_N" + str(x) for x in [1,2,3,4]] + ["H3K27me3_cell_lines_1","H3K27me3_cell_lines_2"]),
+    'results/other_datasets/PCA/PCA_table_cell_lines.npz',
+    'results/other_datasets/PCA/PCA_table_brain.npz',
+    expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
+    expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+    
+    # Snakefile_other_datasets
+    expand('results/other_datasets/bonev/GSE96107_{sample}.bw',sample = config['bonev']['samples'].keys()),
+    expand('results/other_datasets/matsuda/GSM2800523_{sample}.bw',sample = config['matsuda']['samples'].keys()),
+    'results/other_datasets/zhao/GSM3214323_mouse_OPC_H3K4me3chIP-seq_control.bw',
+    expand('results/other_datasets/mESC_ENCODE/bigwig/{sample}.bw',sample = ['mESC_rep1','mESC_rep2']),
+    'results/other_datasets/mESC_ENCODE/peaks/ENCFF105NKG.bed',
+    expand("results/other_datasets/3T3_cells/bigwig/{sample}.bw",sample = config['3T3']['samples'].values()),
+    'results/other_datasets/3T3_cells/macs/3T3_peaks.narrowPeak',
+    'results/other_datasets/Oli-neu/macs/Oli-neu_peaks.narrowPeak',
+    "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.npz",
+    "results/other_datasets/fingerprint_analysis/brain_bulk_fingerprint.txt",
+    
+    # Snakefile 
+    
 
 # rule all:
 #   input:
