@@ -111,8 +111,6 @@ rule merge_bam_per_cluster:
   shell:
     'samtools merge -@ {threads} - {input}/{wildcards.cluster}*.bam | samtools sort > {output.bam} && samtools index {output.bam}'
   
-
-###################### FIX FROM HERE
 # peaks per cluster
 rule call_peaks_bam_per_cluster:
   input:
@@ -143,7 +141,7 @@ rule call_peaks_bam_per_cluster:
 rule bigwig_summary_all_peaks:
   input:
     scCT_bigwig        = "results/{antibody}/clustering/bam_per_cluster/bam/",
-    peaks              = "results/merged/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
+    peaks              = "results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
   output:
     matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"
   threads: 16
