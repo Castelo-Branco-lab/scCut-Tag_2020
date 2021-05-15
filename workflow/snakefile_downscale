@@ -65,7 +65,7 @@ rule downscale_prep_bulk_bw:
 ###################### FIX from here down
 rule compute_matrix:
   input:
-    sc    = "results/H3K27me3_cell_lines/downsample/bigwig/",
+    sc    = "results/H3K27me3_cell_lines/downsample/bigwig/",               # TODO Problem here
     bulk  = "results/other_datasets/downsample/bulk_bigwig/{sample}.bw",
     peaks = lambda wildcards: {"3T3": "/data/proj/GCB_MB/CT/git_test/results/other_datasets/3T3_cells/macs/3T3_summits.bed", \
                                "mESC": "results/other_datasets/mESC_ENCODE/peaks/ENCFF105NKG.bed", \

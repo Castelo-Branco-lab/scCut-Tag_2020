@@ -1,6 +1,7 @@
 configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
 include: 'preflight'
 include: 'snakefile_preprocess'
+include: 'snakefile_scRNA-seq'
 
 import re
 import os
@@ -140,10 +141,10 @@ rule call_peaks_bam_per_cluster:
 # Correlation matrix for the bam per cluster and replicate
 rule bigwig_summary_all_peaks:
   input:
-    scCT_bigwig        = "results/{antibody}/clustering/bam_per_cluster/bam/",
+    scCT_bigwig        = "results/{antibody}/clustering/bam_per_cluster/bigwig/",
     peaks              = "results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
   output:
     matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"
   threads: 16
   shell:
-    "multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw -o {output.matrix} --BED {input.peaks} -p {threads}"
+    "multiBigwigSummary BED-file -b {input.scCT_bigwig}/*.bw -o {output.matrix} --BED {input.peaks} -p {threads}"

@@ -23,6 +23,8 @@ suppressMessages({
 })
 
 set.seed(100)
+
+source("../../scripts/R/func.R")
 ```
 
 
@@ -86,8 +88,8 @@ names(colors) <- c('Astrocytes','free','free','mOL','free','OEC','free','free','
 
 p3 <- DimPlot(integrated, group.by = 'orig.ident', pt.size = 0.2) + ggplot2::ggtitle("Integrated")
 
-p4 <- DimPlot(integrated[,integrated$antibody == "H3K27ac"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("H3K27ac") + NoLegend()
-p5 <- DimPlot(integrated[,integrated$antibody == "Olig2"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("Olig2") + NoLegend() + scale_color_manual(values = unname(colors[c(1,6)]))
+p4 <- DimPlot(integrated[,integrated$Antibody == "H3K27ac"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("H3K27ac") + NoLegend()
+p5 <- DimPlot(integrated[,integrated$Antibody == "Olig2"], pt.size = 0.2, label=TRUE,group.by='cell_type') + ggplot2::ggtitle("Olig2") + NoLegend() + scale_color_manual(values = unname(colors[c(1,6)]))
   
 
 p3
@@ -99,7 +101,7 @@ p4+ p5
 
 
 ```{r}
-brain.Olig2.new <-integrated[,integrated$antibody == "Olig2"]
+brain.Olig2.new <-integrated[,integrated$Antibody == "Olig2"]
 
 brain.Olig2.new <- FindNeighbors(
   object = brain.Olig2.new,
@@ -119,40 +121,22 @@ FeaturePlot(brain.Olig2.new,'logUMI',max.cutoff = 2.5) + scale_color_viridis_c()
 ```
 
 ```{r}
+dir.create(paste0(params$out_prefix,params$antibody,'/integration/bigwig/'),recursive = TRUE)
+
 samples <- gsub(" ","",unlist(strsplit(params$samples,",")))
-fragments.path <- paste0(params$out_prefix,'merged/',params$antibody,'/fragments.tsv.gz')
+fragments.path <- paste0(params$out_prefix,params$antibody,'/fragments.tsv.gz')
 
 fragments <- rtracklayer::import(fragments.path,format = "bed")  
 
 chrom.sizes <- read.table(url('http://hgdownload.cse.ucsc.edu/goldenPath/mm10/bigZips/mm10.chrom.sizes'),sep="\t",stringsAsFactors = FALSE)
 chrom.sizes <- chrom.sizes[1:21,]
 
-
-exportBW <- function(object,cluster,fragments){
-
-  if(class(object) == "Seurat"){
-    cells <- rownames(object@meta.data[object@active.ident == cluster,])
-  }
-  
-   new_read <- GRanges(seqnames = chrom.sizes[,1], 
-          ranges =IRanges(start = as.numeric(chrom.sizes[,2]),
-                          width=1),
-          name = rep("in_silico_extra_read",dim(chrom.sizes)[1]),
-          score = rep(0,dim(chrom.sizes)[1])
-          )
-  
-  fragments.x <- fragments$name %in% cells
-  fragments.x <- fragments[fragments.x]
-  fragments.x <- c(fragments.x,new_read)
-  
-  
-  coverage.x <- coverage(fragments.x)
-  coverage.x <- coverage.x / length(fragments.x)/1000000
-  rtracklayer::export.bw(object = coverage.x, con = paste0(params$out_prefix,params$antibody,'/integration/bigwig/cluster_',cluster,'.bw'))
-}
-
 lapply(levels(brain.Olig2.new@active.ident),function(x){
-  exportBW(brain.Olig2.new,x,fragments)
+  exportBW(object = brain.Olig2.new,
+           cluster = x,
+           fragments = fragments,
+           path = paste0(params$out_prefix,params$antibody,'/integration/bigwig/cluster_',x,'.bw'),
+           chrom.sizes = chrom.sizes)
 })
 
 saveRDS(object = integrated,file = paste0(params$out_prefix,params$antibody,'/integration/integrated.Rds'))

@@ -71,15 +71,15 @@ coembed <- RunPCA(coembed, features = genes.use, verbose = FALSE)
 coembed <- RunUMAP(coembed, dims = 1:30)
 
 DimPlot(brain.RNA)
-DimPlot(coembed,group.by= 'antibody')
+DimPlot(coembed,group.by= 'Antibody')
 DimPlot(coembed,group.by = 'cell_type') + NoLegend()
 
-p1 <- DimPlot(coembed[,coembed$antibody == "H3K4me3"])
+p1 <- DimPlot(coembed[,coembed$Antibody == "H3K4me3"])
 p2 <- DimPlot(coembed[,grep('10X',coembed$orig.ident)],group.by='TaxonomyRank4',label=TRUE,repel=TRUE) + NoLegend()
 
 p1+p2
 
-DimPlot(coembed[,coembed$antibody == "H3K4me3" & coembed$cell_type %in% c('Neurons_1','Neurons_2','Neurons_3')]) + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15))
+DimPlot(coembed[,coembed$Antibody == "H3K4me3" & coembed$cell_type %in% c('Neurons_1','Neurons_2','Neurons_3')]) + coord_cartesian(xlim=c(-15,15),ylim=c(-15,15))
 ```
 
 

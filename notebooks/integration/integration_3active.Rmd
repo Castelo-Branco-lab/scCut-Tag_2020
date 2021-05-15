@@ -94,9 +94,9 @@ names(CTcolors) <- clusters_order
 
 p2 <- DimPlot(integrated.plot, group.by = 'orig.ident', pt.size = 0.2) + ggplot2::ggtitle("Integrated")
 
-p4 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K27ac"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K27ac") + NoLegend() + scale_color_manual(values = CTcolors)
-p5 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K4me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K4me3") + NoLegend() + scale_color_manual(values = CTcolors)
-p6 <- DimPlot(integrated.plot[,integrated.plot$antibody == "H3K36me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K36me3") + NoLegend() + scale_color_manual(values = CTcolors)
+p4 <- DimPlot(integrated.plot[,integrated.plot$Antibody == "H3K27ac"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K27ac") + NoLegend() + scale_color_manual(values = CTcolors)
+p5 <- DimPlot(integrated.plot[,integrated.plot$Antibody == "H3K4me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K4me3") + NoLegend() + scale_color_manual(values = CTcolors)
+p6 <- DimPlot(integrated.plot[,integrated.plot$Antibody == "H3K36me3"], group.by = 'cell_type', pt.size = 0.2, label=TRUE) + ggplot2::ggtitle("H3K36me3") + NoLegend() + scale_color_manual(values = CTcolors)
 
 p2
 p4+p5 + p6
