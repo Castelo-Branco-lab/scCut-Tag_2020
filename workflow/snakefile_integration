@@ -9,7 +9,6 @@ rule all_integration:
     'results/integration/histone_3active/histone_3active_integrated.Rds',
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
-    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz", antibody = antibody_dict.keys()),
     
 
 ####### H3K4me4 RNA integration
@@ -59,32 +58,4 @@ rule integration_active:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\" "
 
 
-
-rule PCA:
-  input:
-    scCT_bigwig        = "results/H3K27me3/clustering/bigwig/",
-    markers_brain      = 'results/H3K27me3/clustering/markers_bed/',
-    markers_cell_lines = 'results/H3K27me3_cell_lines/clustering/markers_bed/',
-    cell_lines         = "results/H3K27me3_cell_lines/clustering/bigwig/",
-    bonev_CN           = "results/other_datasets/bonev/GSE96107_CN_H3K27me3.bw",
-    matsuda_MGL        = "results/other_datasets/matsuda/GSM2800523_Microglia_H3K27me3_ChIP-seq.bw",
-    OPCs_GCB           = config['CR_GCB']['OPC']['bigwig'],     # Deposit to GEO and fix link
-    Oli_neu_GCB        = config['CR_GCB']['Oli-neu']['bigwig'],   # Deposit to GEO and fix link
-    mESC_bigwig_1      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep1.bw',
-    mESC_bigwig_2      = 'results/other_datasets/mESC_ENCODE/bigwig/mESC_rep2.bw',
-    cells_3T3_rep1     = 'results/other_datasets/3T3_cells/bigwig/SRR9889940.bw',
-    cells_3T3_rep2     = 'results/other_datasets/3T3_cells/bigwig/SRR9889941.bw',
-  output:
-#    markers='results/other_datasets/PCA/markers_all.bed',
-    table_cell_lines   = 'results/other_datasets/PCA/PCA_table_cell_lines.npz',
-    table_brain        = 'results/other_datasets/PCA/PCA_table_brain.npz',
-    markers_cell_lines = 'results/other_datasets/PCA/markers_cell_lines.bed',
-    markers_brain      = 'results/other_datasets/PCA/markers_brain.bed',
-  shell:
-    """
-    ls {input.markers_cell_lines}*.bed | while read line; do head -100 $line >> {output.markers_cell_lines}; done 
-    ls {input.markers_brain}*.bed | while read line; do head -100 $line >> {output.markers_brain}; done 
-    multiBigwigSummary BED-file -b {input.cell_lines}*.bw {input.Oli_neu_GCB} {input.mESC_bigwig_1} {input.mESC_bigwig_2} {input.cells_3T3_rep1} {input.cells_3T3_rep2} -o {output.table_cell_lines} --BED {output.markers_cell_lines} 
-    multiBigwigSummary BED-file -b {input.scCT_bigwig}*.bw {input.bonev_CN} {input.matsuda_MGL} {input.OPCs_GCB} -o {output.table_brain} --BED {output.markers_brain} 
-    """
 

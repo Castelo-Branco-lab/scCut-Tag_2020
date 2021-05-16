@@ -36,8 +36,9 @@ genes.genes <- genes.genes[genes.genes$gene_biotype %in% c("protein_coding","lin
 clusters_to_use <- unique(markers$cluster)
 
 
+print(getwd())
+dir.create(path = args$out, recursive = TRUE,showWarnings = TRUE)
 
-dir.create(path = args$out, recursive = TRUE)
 
 lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == x,]
@@ -51,7 +52,7 @@ lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == x,]
   markers.x <- head(markers.x,args$nmarkers)
   genes.x <- genes.genes[genes.genes$symbol %in% markers.x$gene]
-  rtracklayer::export(object = genes.x,con = paste0(args$out,"/",x,"_promoters.bed"))
+  rtracklayer::export(object = genes.x,con = paste0(args$out,"/",x,"_genes.bed"))
 })
 
 

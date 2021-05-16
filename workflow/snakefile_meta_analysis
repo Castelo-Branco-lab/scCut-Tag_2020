@@ -18,7 +18,7 @@ rule bam_files_all:
     'results/other_datasets/PCA/PCA_table_brain.npz',
     # Meme motif analysis
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
-    expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+    expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
     
 
 rule generate_fingerprint_heatmap_scCT:
@@ -104,12 +104,12 @@ rule motif_search:
       peaks     = "results/{antibody}/macs/narrow/{antibody}_summits.bed",
       blacklist = "results/general/mm10.blacklist.bed.gz"
   output:
-      meme_out           = directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),
+      meme_out           = directory("results/{antibody}/motifs/MEME_{width}/out_{npeaks}"),
   params:
-      summits_filtered   = "results/merged/{antibody}/MEME_{width}/summits_filtered_{npeaks}.bed",
-      top_summits        = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.bed",
-      top_summits_padded = "results/merged/{antibody}/MEME_{width}/top_summits_padded_{npeaks}.bed",
-      top_summits_fa     = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.fa",
+      summits_filtered   = "results/{antibody}/motifs/MEME_{width}/summits_filtered_{npeaks}.bed",
+      top_summits        = "results/{antibody}/motifs/MEME_{width}/top_summits_{npeaks}.bed",
+      top_summits_padded = "results/{antibody}/motifs/MEME_{width}/top_summits_padded_{npeaks}.bed",
+      top_summits_fa     = "results/{antibody}/motifs/MEME_{width}/top_summits_{npeaks}.fa",
       genome_fa          = config['db']['genome_fa'],
       npeaks             = "{npeaks}",
       #out                = "results/merged/{antibody}/MEME_{width}/out_{npeaks}",

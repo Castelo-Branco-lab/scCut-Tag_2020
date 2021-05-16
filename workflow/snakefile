@@ -12,6 +12,7 @@ include: 'snakefile_other_datasets'
 include: 'snakefile_figures'
 include: 'snakefile_scRNA-seq'
 include: 'snakefile_downscale'
+include: 'snakefile_meta_analysis'
 # include: 'snakefile_downstream'
 
 configfile: os.path.dirname(workflow.basedir) + '/config/config.yaml'
@@ -61,6 +62,8 @@ rule all:
     [expand('results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
       antibody = antibody, \
       cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
+    expand('results/{antibody}/clustering/markers_bed_genes/',antibody = antibody_dict.keys()),
+    expand("results/{antibody}/correlation_matrix/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
     
     # Snakefile downscale 
     expand('results/{antibody}/downsample/bam/fragments_{cluster}_{n}.bam', cluster=['mOL'], antibody=['H3K27ac'], n=[10,20,50,100,200,500,1000,2000,5000]),
@@ -77,7 +80,7 @@ rule all:
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
-    expand("results/merged/{antibody}/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+    expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
     
     # Snakefile_other_datasets
     expand('results/other_datasets/bonev/GSE96107_{sample}.bw',sample = config['bonev']['samples'].keys()),
@@ -97,7 +100,6 @@ rule all:
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
     expand('results/{antibody}/integration/integrated.Rds',antibody = ['Rad21','Olig2']),
-    expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz", antibody = antibody_dict.keys()),
     
     
     

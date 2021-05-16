@@ -23,7 +23,11 @@ rule clustering_all:
       antibody = antibody, \
       cluster  = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + antibody + '/clustering/bam_per_cluster/bam/*.bam')]))) for antibody in antibody_list],
     
-    # expand("results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
+    # Convert markers.csv to bed file with coordinates 
+    expand('results/{antibody}/clustering/markers_bed_genes/',antibody = antibody_dict.keys()),
+    
+    # Correlation matrix for sc clusters
+    expand("results/{antibody}/correlation_matrix/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
 
 
 ########### FINAL TWEAKED CLUSTERING
@@ -144,7 +148,19 @@ rule bigwig_summary_all_peaks:
     scCT_bigwig        = "results/{antibody}/clustering/bam_per_cluster/bigwig/",
     peaks              = "results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak",
   output:
-    matrix             = "results/other_datasets/correlation/{antibody}_correlation_matrix.txt.gz"
+    matrix             = "results/{antibody}/correlation_matrix/{antibody}_correlation_matrix.txt.gz"
   threads: 16
   shell:
     "multiBigwigSummary BED-file -b {input.scCT_bigwig}/*.bw -o {output.matrix} --BED {input.peaks} -p {threads}"
+
+
+# Convert list of marker regions to gene/promoter coordinates
+rule markers_to_gene:
+  input:
+    markers  = 'results/{antibody}/clustering/markers.csv'
+  output:
+    directory('results/{antibody}/clustering/markers_bed_genes/')
+  params:
+    script = os.path.dirname(workflow.basedir) + "/scripts/R/markers_to_bed_new.R"
+  shell:
+    "Rscript {params.script} -i {input.markers} -o {output}"

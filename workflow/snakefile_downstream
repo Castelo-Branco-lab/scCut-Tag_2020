@@ -15,77 +15,11 @@ rule downstream_all:
     
     
 
-#######################################
-
-
-# Motif search
-rule motif_search:
-  input:
-      peaks     = "results/merged/{antibody}/macs/narrow/{antibody}_summits.bed",
-      blacklist = "results/mm10.blacklist.bed.gz"
-  output:
-      meme_out           = directory("results/merged/{antibody}/MEME_{width}/out_{npeaks}"),
-  params:
-      summits_filtered   = "results/merged/{antibody}/MEME_{width}/summits_filtered_{npeaks}.bed",
-      top_summits        = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.bed",
-      top_summits_padded = "results/merged/{antibody}/MEME_{width}/top_summits_padded_{npeaks}.bed",
-      top_summits_fa     = "results/merged/{antibody}/MEME_{width}/top_summits_{npeaks}.fa",
-      genome_fa          = config['db']['genome_fa'],
-      npeaks             = "{npeaks}",
-      #out                = "results/merged/{antibody}/MEME_{width}/out_{npeaks}",
-  shell:
-#      "set +o pipefail;"
-      "cat {input.peaks} | grep -v -e 'chrM' | sort-bed - | bedops -n 1 - {input.blacklist} > {params.summits_filtered};"
-      "sort -k5gr {params.summits_filtered} | head -{params.npeaks} | sort-bed - > {params.top_summits};"
-      "bedops --range {wildcards.width} -u {params.top_summits} > {params.top_summits_padded};"
-      "bedtools getfasta -fi {params.genome_fa} -bed {params.top_summits_padded} -fo {params.top_summits_fa};"
-      "conda activate meme; " # MEME=5.1.1 env
-      "meme-chip -oc {output.meme_out} -dreme-m 10 -meme-nmotifs 10 {params.top_summits_fa};"
-
-
 ###########################################################
 ################### DOWNSTREAM ANALYSIS ###################
 ###########################################################
 
-rule call_peaks_bam_per_cluster:
-  input:
-    lambda wildcards: expand('results/{antibody}/clustering/bam_per_cluster/{sample}/',sample = antibody_dict[wildcards.antibody],antibody = wildcards.antibody),
-  output:
-   'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/{cluster}_peaks.broadPeak',
-  params:
-    bam_files = lambda wildcards: expand('results/{antibody}/clustering/bam_per_cluster/{sample}/{cluster}_out.bam',sample = antibody_dict[wildcards.antibody],antibody = wildcards.antibody,cluster = wildcards.cluster),
-    outdir    = 'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}'
-  shell:
-    "macs2 callpeak -t {params.bam_files}  \
-  -n {wildcards.cluster} \
-  -f BAMPE \
-  -g mm \
-  --qvalue 1e-10 \
-  --outdir {params.outdir} \
-  --broad \
-  --bdg \
-  --max-gap 1000 \
-  --min-length 500 \
-  --broad-cutoff 0.001 \
-  --llocal 1000000 \
-  --slocal 0"
-
-
-
-
-
-rule markers_to_gene:
-  input:
-    markers  = 'results/{antibody}/clustering/markers.csv'
-  output:
-    directory('results/{antibody}/clustering/markers_bed_genes/')
-  params:
-    script = os.path.dirname(workflow.basedir) + "/scripts/R/markers_to_bed.R"
-  shell:
-    "Rscript {params.script} {input.markers} {output}"
-
-
-######## METAGENE PLOTS
+######## METAGENE PLOTS -> TODO FIX GENES/PROMOTERS FROM RULE 
 rule metagene:
   input:
     bw       = "results/{antibody1}/clustering/bigwig/",
