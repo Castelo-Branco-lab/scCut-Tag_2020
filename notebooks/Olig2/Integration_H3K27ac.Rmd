@@ -139,6 +139,7 @@ lapply(levels(brain.Olig2.new@active.ident),function(x){
            chrom.sizes = chrom.sizes)
 })
 
+print(paste0("Saving RDS file to ", paste0(params$out_prefix,params$antibody,'/integration/integrated.Rds')))
 saveRDS(object = integrated,file = paste0(params$out_prefix,params$antibody,'/integration/integrated.Rds'))
 
 ```

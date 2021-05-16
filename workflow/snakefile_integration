@@ -35,7 +35,7 @@ rule integration_olig2_rad21:
     notebook = os.path.dirname(workflow.basedir) + "/notebooks/{antibody}/Integration_H3K27ac.Rmd",
   output:
     'results/{antibody}/integration/integrated.Rds',
-    'results/{antibody}/integration/bigwig/'
+    directory('results/{antibody}/integration/bigwig/'),
   params:
     report         = CWD + '/results/{antibody}/integration/integrated.html',
     out_prefix     = CWD + '/results/'
