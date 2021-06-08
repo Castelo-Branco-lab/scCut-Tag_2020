@@ -116,7 +116,7 @@ rule merge_bam_per_cluster:
   shell:
     'samtools merge -@ {threads} - {input}/{wildcards.cluster}*.bam | samtools sort > {output.bam} && samtools index {output.bam}'
   
-# peaks per cluster
+# peaks per cluster TODO - delete and check if works 
 rule call_peaks_bam_per_cluster:
   input:
     'results/{antibody}/clustering/bam_per_cluster/bam_merged/{cluster}.bam'
@@ -126,19 +126,18 @@ rule call_peaks_bam_per_cluster:
     outdir    = 'results/{antibody}/clustering/bam_per_cluster/macs_broad/{cluster}/',
   shell:
     """
+  "macs2 callpeak -t {input.bam} -g mm -f BAM --outdir {params.outdir} --nomodel -n {params.name} --max-gap 2500 --nolambda --slocal 1000000 --llocal 1000000"
       macs2 callpeak -t {input} \
         -n {wildcards.cluster} \
         -f BAMPE \
         -g mm \
-        --qvalue 1e-10 \
         --outdir {params.outdir} \
         --broad \
         --bdg \
         --max-gap 1000 \
         --min-length 500 \
-        --broad-cutoff 0.001 \
-        --llocal 1000000 \
-        --slocal 0
+        --nomodel \
+        --nolambda
   """
 
 

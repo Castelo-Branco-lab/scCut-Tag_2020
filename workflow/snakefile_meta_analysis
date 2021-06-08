@@ -9,7 +9,7 @@ include: 'snakefile_kaya_okur'
 rule bam_files_all:
   input:
     # H3K27me3 fingerprint analysis
-    expand("results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt",antibody = ["H3K27me3"]),
+    expand("results/{antibody}/fingerprint_analysis/scCT_{antibody}_fingerprint.txt",antibody = ["H3K27me3"]),
     # FriP analysis for revision
     expand("results/other_datasets/frip_analysis/kaya_okur/{sample}/all_fragments.txt",sample=['K562_H3K27me3_iCell8','K562_H3K4me2_iCell8','H1_H3K27me3_iCell8']),
     expand("results/other_datasets/frip_analysis/scCT/{sample}/all_fragments.txt",antibody="H3K27me3",sample=["H3K27me3_N" + str(x) for x in [1,2,3,4]] + ["H3K27me3_cell_lines_1","H3K27me3_cell_lines_2"]),
@@ -19,6 +19,7 @@ rule bam_files_all:
     # Meme motif analysis
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
     expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+
     
 
 rule generate_fingerprint_heatmap_scCT:
@@ -30,13 +31,13 @@ rule generate_fingerprint_heatmap_scCT:
                                 cluster = list(set([re.sub("_rep.*.bam","",os.path.basename(x)) for x in glob.glob('results/' + wildcards.antibody + '/clustering/bam_per_cluster/bam/*.bam')])), \
                                 antibody = wildcards.antibody)
   output:
-    "results/other_datasets/fingerprint_analysis/scCT_{antibody}_fingerprint.txt"
+    "results/{antibody}/fingerprint_analysis/scCT_{antibody}_fingerprint.txt"
   threads: 16
   params:
     per_cluster_bam = 'results/{antibody}/clustering/bam_per_cluster/bam_merged/*.bam'
   shell:
     """
-      plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {input.per_cluster_bam} -p 16
+      plotFingerprint --ignoreDuplicates --outRawCounts {output} -b {input.merged_bam} {input.per_replicate_bam} {input.per_cluster_bam} -p {threads}
     """
 
 # FrIP analysis
@@ -121,4 +122,5 @@ rule motif_search:
       "bedtools getfasta -fi {params.genome_fa} -bed {params.top_summits_padded} -fo {params.top_summits_fa};"
       "conda activate meme; " # MEME=5.1.1 env
       "meme-chip -oc {output.meme_out} -dreme-m 10 -meme-nmotifs 10 {params.top_summits_fa};"
+
 
