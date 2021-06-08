@@ -9,6 +9,7 @@ rule all_integration:
     'results/integration/histone_3active/histone_3active_integrated.Rds',
     'results/other_datasets/PCA/PCA_table_cell_lines.npz',
     'results/other_datasets/PCA/PCA_table_brain.npz',
+    'results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds',
     
 
 ####### H3K4me4 RNA integration
@@ -57,5 +58,17 @@ rule integration_active:
   shell:
     "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\" "
 
+rule integration_H3K4me3_marques:
+  input:
+    notebook = os.path.dirname(workflow.basedir) + "/notebooks/integration/integration_H3K4me3_marques.Rmd",
+    marques  = "results/marques_RNA/clustering/01.clustering.Rds",
+    H3K4me3  = "results/H3K4me3/clustering/01.clustering.Rds",
+  output:
+    "results/integration/H3K4me3_marques/H3K4me3_marques_coembed.Rds"
+  params:
+    report     = CWD + "/results/integration/H3K4me3_marques/H3K4me3_marques_coembed.html",
+    out_prefix = CWD + "/results/",
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\" "
 
 

@@ -28,6 +28,10 @@ rule clustering_all:
     
     # Correlation matrix for sc clusters
     expand("results/{antibody}/correlation_matrix/{antibody}_correlation_matrix.txt.gz",antibody = antibody_dict.keys()),
+    
+    # GO terms for H3K4me3
+    'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
+    'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds'
 
 
 ########### FINAL TWEAKED CLUSTERING
@@ -163,3 +167,31 @@ rule markers_to_gene:
     script = os.path.dirname(workflow.basedir) + "/scripts/R/markers_to_bed_new.R"
   shell:
     "Rscript {params.script} -i {input.markers} -o {output}"
+
+###### H3K4me3 GO analysis
+rule GO_H3K4me3:
+  input:
+    seurat  = "results/H3K4me3/clustering/01.clustering.Rds",
+    markers = "results/H3K4me3/clustering/markers.csv",
+  output:
+    'results/H3K4me3/GO_terms/GO_matrix_markers.csv',
+  params:
+    notebook   = os.path.dirname(workflow.basedir) + "/notebooks/H3K4me3/GO_analysis.Rmd",
+    report     = CWD + '/results/H3K4me3/GO_terms/GO_analysis.html',
+    out_prefix = CWD + '/results/'
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{params.notebook}',output_file='{params.report}',params=list(out_prefix='{params.out_prefix}')) \""
+
+# ###### H3K4me3 pseudotime
+rule pseudotime:
+  input:
+    seurat   = 'results/H3K4me3/clustering/01.clustering.Rds',
+    notebook = os.path.dirname(workflow.basedir) + '/notebooks/H3K4me3/pseudotime.Rmd',
+  output:
+    'results/H3K4me3/pseudotime/pseudotime_OLG_final.Rds',
+    'results/H3K4me3/pseudotime/pseudotime_OLG_slingshot.Rds'
+  params:
+    out_prefix = CWD + '/results/',
+    report     = CWD + '/results/H3K4me3/pseudotime/pseudotime_final.html',
+  shell:
+    "Rscript -e \"rmarkdown::render(input='{input.notebook}',output_file = '{params.report}', params=list(out_prefix = '{params.out_prefix}'))\""

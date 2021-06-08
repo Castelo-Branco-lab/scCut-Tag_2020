@@ -3,6 +3,8 @@ title: "integration_H3K4me3_marques"
 author: "Marek"
 date: "1/5/2021"
 output: html_document
+params:
+  out_prefix: "~/mount/CT/git_test/results/"
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +17,16 @@ knitr::opts_chunk$set(echo = TRUE)
 # Integration with H3K4me3
 
 ```{r load_H3K4me3}
+library(Seurat)
+library(Signac)
+library(dplyr)
+library(viridis)
+library(gridExtra)
+library(ggplot2)
+
 brain.H3K4me3 <- readRDS(file = paste0(params$out_prefix,"H3K4me3/clustering/01.clustering.Rds"))
+brain.RNA     <- readRDS(file = paste0(params$out_prefix,"marques_RNA/clustering/01.clustering.Rds"))
+markers       <- read.csv2(file = paste0(params$out_prefix,"marques_RNA/clustering/markers.csv"),stringsAsFactors = TRUE)
 ```
 
 
@@ -60,7 +71,7 @@ brain.H3K4me3.OL <- AddMetaData(brain.H3K4me3.OL,cluster.scores)
 
 
 p.ls <- lapply(colnames(cluster.scores),function(x){
-  FeaturePlot(brain.H3K4me3.OL,x,max.cutoff = quantile(brain.H3K4me3.OL@meta.data[,x],0.8)) + scale_color_viridis_c()
+  FeaturePlot(brain.H3K4me3.OL,x,max.cutoff = quantile(brain.H3K4me3.OL@meta.data[,x],0.8)) + scale_color_viridis()
 })
 
 do.call(grid.arrange,p.ls)
@@ -70,10 +81,6 @@ do.call(grid.arrange,p.ls)
 
 ```{r,fig.width=10,fig.height=5}
 DefaultAssay(brain.H3K4me3.OL) <- "GA"
-
-rm(transfer.anchors)
-rm(inputation)
-rm(coembed)
 
 common.genes <- intersect(rownames(brain.H3K4me3.OL),rownames(brain.RNA))
 
@@ -117,7 +124,7 @@ p.ls <- lapply(colnames(cluster.scores),function(x){
   coembed.x <- coembed[,coembed$Antibody == "H3K4me3"] 
   FeaturePlot(object = coembed.x,features = x,max.cutoff = quantile(coembed.x@meta.data[,x],0.9),min.cutoff = quantile(coembed.x@meta.data[,x],0.1),pt.size=1) + 
     #scale_color_gradient2(low = 'blue',mid='white',high = 'red',midpoint = median(coembed.x@meta.data[,x])) + 
-    scale_color_viridis_c() + 
+    scale_color_viridis() + 
     theme(legend.position = 'bottom')
 })
 

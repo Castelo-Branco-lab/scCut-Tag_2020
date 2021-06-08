@@ -46,4 +46,7 @@ dependencies:
   - bioconductor-biovizBase
   - r-data.table
   - r-ggplot2
-  
+
+# R packages
+# slingshot 1.4.0
+# Signac
