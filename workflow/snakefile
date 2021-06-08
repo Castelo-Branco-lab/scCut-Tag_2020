@@ -39,12 +39,13 @@ rule all:
     'results/scATAC_P50/clustering/bam_per_cluster/scATAC/',
     
     # Snakefile scRNA-seq
+    'results/marques_RNA/clustering/01.clustering.Rds',
+    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
     expand('results/{RNA}/clustering/markers_bed/',RNA=["Sten_RNA","Sox10_RNA"]),
-    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
     'results/Sox10_RNA/integration/scRNA_integrated.Rds',
-    'results/marques_RNA/clustering/01.clustering.Rds',
+    
     
     # Snakefile Kaya-Okur
     expand("results/other_datasets/kaya_okur/bigwig/{sample}.bw",sample = config['kaya-okur']['samples']),
@@ -82,6 +83,7 @@ rule all:
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
     expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
     expand("results/{antibody1}/metagene/{antibody2}/metagene_plot.png", antibody1 = ["H3K4me3","H3K27me3"],antibody2 = ["H3K4me3","H3K27me3"]),
+    expand('results/{antibody}/metagene/metagene_{RNA}_{type}.png',antibody = antibody_dict.keys() , RNA = ['Sten_RNA','Sox10_RNA'], type = ['genes_scaled','promoters']),
     
     
     # Snakefile_other_datasets
@@ -113,21 +115,6 @@ rule all:
 
 ######## METAGENE PLOTS
 #
-# rule metagene_RNA_promoters:
-#   input:
-#     promoters  = 'results/{RNA}/marker_promoters/',
-#     bigwig     = 'results/{antibody}/clustering/bigwig/',
-#   output:
-#     matrix   = 'results/{antibody}/metagene/metagene_{RNA}_promoters.txt.gz',
-#     png      = 'results/{antibody}/metagene/metagene_{RNA}_promoters.png',
-#     matrix2  = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.txt.gz',
-#     png2     = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.png',
-#   threads: 8
-#   shell:
-#     "computeMatrix reference-point -S {input.bigwig}*.bw -R {input.promoters}*_promoters.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
-#     "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
-#     "computeMatrix scale-regions -S {input.bigwig}*.bw -R {input.promoters}*_genes.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
-#     "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
 #
 # rule export_bam_per_cluster:
 #   input:

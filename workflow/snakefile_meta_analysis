@@ -19,6 +19,10 @@ rule bam_files_all:
     # Meme motif analysis
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
     expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+    # Metagene plots
+    expand("results/{antibody1}/metagene/{antibody2}/metagene_plot.png", antibody1 = ["H3K4me3","H3K27me3"],antibody2 = ["H3K4me3","H3K27me3"]),
+    # Metagene RNA promoters
+    expand('results/{antibody}/metagene/metagene_{RNA}_{type}.png',antibody = antibody_dict.keys() , RNA = ['Sten_RNA','Sox10_RNA'], type = ['genes_scaled','promoters']),
 
     
 
@@ -123,4 +127,38 @@ rule motif_search:
       "conda activate meme; " # MEME=5.1.1 env
       "meme-chip -oc {output.meme_out} -dreme-m 10 -meme-nmotifs 10 {params.top_summits_fa};"
 
+######## METAGENE PLOTS
+rule metagene:
+  input:
+    bw       = "results/{antibody1}/clustering/bigwig/",
+    bed      = "results/{antibody2}/clustering/markers_bed/",
+    bed_gene = "results/{antibody2}/clustering/markers_bed_genes/",
+  output:
+    matrix1 = "results/{antibody1}/metagene/{antibody2}/metagene_plot.txt.gz",
+    png1    = "results/{antibody1}/metagene/{antibody2}/metagene_plot.png",
+    matrix2 = "results/{antibody1}/metagene/{antibody2}/metagene_genes.txt.gz",
+    png2    = "results/{antibody1}/metagene/{antibody2}/metagene_genes.png",
+  threads: 10
+  shell:
+    "computeMatrix reference-point -S {input.bw}/*.bw -R {input.bed}/*.bed -o {output.matrix1} -a 10000 -b 10000 -p {threads} && "
+    "plotHeatmap -m {output.matrix1} -o {output.png1} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
 
+    "computeMatrix scale-regions -S {input.bw}/*.bw -R {input.bed_gene}/*.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
+
+
+rule metagene_RNA_promoters:
+  input:
+    promoters  = 'results/{RNA}/clustering/markers_bed/',
+    bigwig     = 'results/{antibody}/clustering/bigwig/',
+  output:
+    matrix   = 'results/{antibody}/metagene/metagene_{RNA}_promoters.txt.gz',
+    png      = 'results/{antibody}/metagene/metagene_{RNA}_promoters.png',
+    matrix2  = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.txt.gz',
+    png2     = 'results/{antibody}/metagene/metagene_{RNA}_genes_scaled.png',
+  threads: 8
+  shell:
+    "computeMatrix reference-point -S {input.bigwig}/*.bw -R {input.promoters}/*_promoters.bed -o {output.matrix} -a 10000 -b 10000 -p {threads} && "
+    "plotHeatmap -m {output.matrix} -o {output.png} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "
+    "computeMatrix scale-regions -S {input.bigwig}/*.bw -R {input.promoters}/*_genes.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} && "
+    "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel promoter --averageTypeSummaryPlot sum --colorList white,darkgreen --heatmapWidth 10  --heatmapHeight 80; "

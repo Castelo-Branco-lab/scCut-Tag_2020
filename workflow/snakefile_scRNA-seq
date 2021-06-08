@@ -6,12 +6,13 @@ include: 'preflight'
 
 rule scRNA_seq_all:
   input:
+    'results/marques_RNA/clustering/01.clustering.Rds',
+    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sten_RNA/clustering/01.clustering_20000cells.Rds',
     expand('results/{RNA}/clustering/markers_bed/',RNA=["Sten_RNA","Sox10_RNA"]),
-    'results/Sox10_RNA/clustering/GFP/01.clustering.Rds',
     'results/Sox10_RNA/clustering/GFP/RNA_expression_TPM.csv',
     'results/Sox10_RNA/integration/scRNA_integrated.Rds',
-    'results/marques_RNA/clustering/01.clustering.Rds'
+
 
 # Mouse brain atlas SL lab
 
