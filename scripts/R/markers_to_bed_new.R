@@ -43,7 +43,7 @@ dir.create(path = args$out, recursive = TRUE,showWarnings = TRUE)
 lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == x,]
   markers.x <- head(markers.x,args$nmarkers)
-  promoters.x <- genes.promoters[genes.promoters$symbol %in% markers.x$gene]
+  promoters.x <- genes.promoters[genes.promoters$symbol %in% markers.x$closest_gene]
   rtracklayer::export(object = promoters.x,con = paste0(args$out,"/",x,"_promoters.bed"))
 })
 
@@ -51,7 +51,7 @@ lapply(clusters_to_use,function(x){
 lapply(clusters_to_use,function(x){
   markers.x <- markers.pos[markers.pos$cluster == x,]
   markers.x <- head(markers.x,args$nmarkers)
-  genes.x <- genes.genes[genes.genes$symbol %in% markers.x$gene]
+  genes.x <- genes.genes[genes.genes$symbol %in% markers.x$closest_gene]
   rtracklayer::export(object = genes.x,con = paste0(args$out,"/",x,"_genes.bed"))
 })
 

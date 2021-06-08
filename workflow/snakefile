@@ -81,6 +81,7 @@ rule all:
     'results/other_datasets/PCA/PCA_table_brain.npz',
     expand("results/{antibody}/macs/narrow/{antibody}_peaks.narrowPeak", antibody = ['Rad21','Olig2']),
     expand("results/{antibody}/motifs/MEME_{width}/out_{npeaks}", antibody = ['Rad21','Olig2'],width = [25,50,100,150,250], npeaks = [1000,5000,10000,25000,50000]),
+    expand("results/{antibody1}/metagene/{antibody2}/metagene_plot.png", antibody1 = ["H3K4me3","H3K27me3"],antibody2 = ["H3K4me3","H3K27me3"]),
     
     
     # Snakefile_other_datasets
@@ -110,38 +111,7 @@ rule all:
 # ################### DOWNSTREAM ANALYSIS ###################
 # ###########################################################
 
-#
-# rule markers_to_gene:
-#   input:
-#     markers  = 'results/{antibody}/clustering/markers.csv'
-#   output:
-#     directory('results/{antibody}/clustering/markers_bed_genes/')
-#   params:
-#     script = os.path.dirname(workflow.basedir) + "/scripts/R/markers_to_bed.R"
-#   shell:
-#     "Rscript {params.script} {input.markers} {output}"
-#
-#
-# ######## METAGENE PLOTS
-# rule metagene:
-#   input:
-#     bw       = "results/{antibody1}/clustering/bigwig/",
-#     bed      = "results/{antibody2}/clustering/markers_bed/",
-#     bed_gene = "results/{antibody2}/clustering/markers_bed_genes/",
-#   output:
-#     matrix1 = "results/{antibody1}/metagene/{antibody2}/metagene_plot.txt.gz",
-#     png1    = "results/{antibody1}/metagene/{antibody2}/metagene_plot.png",
-#     matrix2 = "results/{antibody1}/metagene/{antibody2}/metagene_genes.txt.gz",
-#     png2    = "results/{antibody1}/metagene/{antibody2}/metagene_genes.png",
-#   threads: 8
-#   shell:
-#     "computeMatrix reference-point -S {input.bw}*.bw -R {input.bed}*.bed -o {output.matrix1} -a 10000 -b 10000 -p {threads} &&"
-#     "plotHeatmap -m {output.matrix1} -o {output.png1} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
-#
-#     "computeMatrix scale-regions -S {input.bw}*.bw -R {input.bed_gene}*.bed -o {output.matrix2} -a 2000 -b 2000 -p {threads} &&"
-#     "plotHeatmap -m {output.matrix2} -o {output.png2} --sortRegions descend --refPointLabel peak --averageTypeSummaryPlot sum --colorList white,darkred --heatmapWidth 10  --heatmapHeight 80; "
-#
-#
+######## METAGENE PLOTS
 #
 # rule metagene_RNA_promoters:
 #   input:
